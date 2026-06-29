@@ -33,7 +33,11 @@ public class UnregisterCommand {
 
         // 1. Verificar contraseña
         if (!LoginManager.checkPassword(password, userData.getPasswordHash())) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errWrongPassword));
+            player.sendSystemMessage(Component.literal(String.format(
+                DirectAuth.getConfig().getLang().errWrongPassword,
+                1,
+                DirectAuth.getConfig().maxLoginAttempts
+            )));
             return 0;
         }
 

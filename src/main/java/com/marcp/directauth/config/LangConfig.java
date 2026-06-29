@@ -18,6 +18,8 @@ public class LangConfig {
     public String errPasswordTooLong = "§cPassword cannot be longer than 32 characters.";
     public String msgRegistered = "§a✓ Account registered successfully.";
     public String msgPremiumEnableHint = "§7Do you have a paid Minecraft account? Use §b/online§7 to enable auto-login.";
+    public String errRegistrationCooldown = "§cPlease wait a moment before registering.";
+    public String errIpLimitReached = "§cRegistration limit reached for this IP address.";
     
     // --- Login Messages ---
     public String errNotRegistered = "§cYou do not have an account. Use §e/register <password>";
@@ -56,20 +58,20 @@ public class LangConfig {
     public String msgUseCommands = "§cPlease use commands to authenticate first.";
     
     // --- Account Management & Confirmation ---
-    public String msgConfirmRequest = "§e⚠️ ¡Confirmación Requerida!\n§7Estás a punto de realizar una acción delicada.\n§7Escribe §6/directauth confirm§7 para proceder.";
-    public String msgPasswordChanged = "§a✓ Contraseña actualizada correctamente.";
-    public String msgAccountDeleted = "§cTu cuenta ha sido eliminada.";
-    public String errOldPasswordWrong = "§cLa contraseña antigua es incorrecta.";
-    public String errNoPendingAction = "§cNo tienes ninguna acción pendiente de confirmar.";
-    public String msgActionExpired = "§cLa solicitud de confirmación ha caducado.";
+    public String msgConfirmRequest = "§e⚠️ Confirmation Required!\n§7You are about to perform a sensitive action.\n§7Type §6/directauth confirm§7 to proceed.";
+    public String msgPasswordChanged = "§a✓ Password updated successfully.";
+    public String msgAccountDeleted = "§cYour account has been deleted.";
+    public String errOldPasswordWrong = "§cThe old password is incorrect.";
+    public String errNoPendingAction = "§cYou have no pending action to confirm.";
+    public String msgActionExpired = "§cThe confirmation request has expired.";
     
     // --- Session Messages ---
     public String msgSessionRestored = "§aWelcome back. Session restored automatically.";
     public String msgLogoutSuccess = "§cLogged out successfully.";
 
     // --- Admin Management ---
-    public String msgAdminResetSuccess = "§aContraseña restablecida para el usuario %s.";
-    public String msgAdminUnregisterSuccess = "§aEl usuario %s ha sido eliminado de la base de datos.";
+    public String msgAdminResetSuccess = "§aPassword reset for user %s.";
+    public String msgAdminUnregisterSuccess = "§aUser %s has been removed from the database.";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -108,6 +110,8 @@ public class LangConfig {
             errPasswordTooLong = "§cLa contraseña no puede tener más de 32 caracteres.";
             msgRegistered = "§a✓ Cuenta registrada exitosamente.";
             msgPremiumEnableHint = "§7¿Tienes una cuenta de Minecraft premium? Usa §b/online§7 para activar el auto-login.";
+            errRegistrationCooldown = "§cPor favor, espera un momento antes de registrarte.";
+            errIpLimitReached = "§cSe ha alcanzado el límite de registros para esta dirección IP.";
 
             // --- Login Messages ---
             errNotRegistered = "§cNo tienes una cuenta. Usa §e/register <contraseña>";

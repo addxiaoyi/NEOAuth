@@ -51,9 +51,9 @@ public class MigrationManager {
                         
                         boolean success = sourceDir.renameTo(targetDir);
                         if (success) {
-                            DirectAuth.LOGGER.info("DirectAuth Migration: Carpeta movida {} -> {}", sourceDir.getName(), targetDir.getName());
+                            DirectAuth.LOGGER.info("DirectAuth Migration: Folder moved {} -> {}", sourceDir.getName(), targetDir.getName());
                         } else {
-                            DirectAuth.LOGGER.error("DirectAuth Migration: Fallo al mover carpeta {}", sourceDir.getPath());
+                            DirectAuth.LOGGER.error("DirectAuth Migration: Failed to move folder {}", sourceDir.getPath());
                         }
                     }
                     continue; // Pasamos a la siguiente entrada de config
@@ -94,7 +94,7 @@ public class MigrationManager {
             Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
         Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        DirectAuth.LOGGER.info("DirectAuth Migration: Archivo migrado {}", target.getName());
+        DirectAuth.LOGGER.info("DirectAuth Migration: File migrated {}", target.getName());
     }
 
     private static void processTextReplacement(File file, String oldDash, String newDash, String oldNoDash, String newNoDash) {
@@ -110,10 +110,10 @@ public class MigrationManager {
 
             if (!content.equals(originalContent)) {
                 Files.writeString(file.toPath(), content);
-                DirectAuth.LOGGER.info("DirectAuth Migration: Contenido actualizado (IDs internas) en {}", file.getName());
+                DirectAuth.LOGGER.info("DirectAuth Migration: Content updated (internal IDs) in {}", file.getName());
             }
         } catch (IOException e) {
-            DirectAuth.LOGGER.error("DirectAuth Migration: Error leyendo/escribiendo archivo de texto {}", file.getName(), e);
+            DirectAuth.LOGGER.error("DirectAuth Migration: Error reading/writing text file {}", file.getName(), e);
         }
     }
 }

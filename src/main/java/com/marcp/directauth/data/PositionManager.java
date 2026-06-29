@@ -32,7 +32,7 @@ public class PositionManager {
                 if (positions == null) positions = new HashMap<>();
             }
         } catch (IOException e) {
-            System.err.println("Error cargando posiciones: " + e.getMessage());
+            System.err.println("DirectAuth: Error loading positions: " + e.getMessage());
             positions = new HashMap<>();
         }
     }
@@ -43,7 +43,7 @@ public class PositionManager {
             GSON.toJson(positions, writer);
             writer.close();
         } catch (IOException e) {
-            System.err.println("Error guardando posiciones: " + e.getMessage());
+            System.err.println("DirectAuth: Error saving positions: " + e.getMessage());
         }
     }
     

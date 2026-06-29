@@ -35,7 +35,7 @@ public class MojangAPI {
                     return null; // Usuario no existe
                 }
             } catch (Exception e) {
-                System.err.println("Error consultando API de Mojang: " + e.getMessage());
+                System.err.println("DirectAuth: Error querying Mojang API: " + e.getMessage());
             }
             return null;
         });

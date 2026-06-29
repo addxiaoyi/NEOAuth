@@ -159,7 +159,7 @@ public class LoginManager {
         String currentIp = player.getIpAddress();
         if (!session.ipAddress.equals(currentIp)) {
             // Log de advertencia opcional para admins
-            com.marcp.directauth.DirectAuth.LOGGER.warn("Intento de sesión inválida (IP distinta) para {}", player.getName().getString());
+            com.marcp.directauth.DirectAuth.LOGGER.warn("DirectAuth: Invalid session attempt (different IP) for {}", player.getName().getString());
             return false; 
         }
 

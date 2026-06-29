@@ -37,7 +37,7 @@ public class RegisterCommand {
         int requiredDelay = DirectAuth.getConfig().registrationDelay;
 
         if (secondsAlive < requiredDelay) {
-            player.sendSystemMessage(Component.literal("§cPlease wait a moment before registering."));
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errRegistrationCooldown));
             return 0;
         }
 
@@ -45,7 +45,7 @@ public class RegisterCommand {
         int accountsOnIp = DirectAuth.getDatabase().countAccountsByIP(playerIp);
         
         if (accountsOnIp >= DirectAuth.getConfig().maxAccountsPerIP) {
-            player.sendSystemMessage(Component.literal("§cRegistration limit reached for this IP address."));
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errIpLimitReached));
             return 0;
         }
         

@@ -97,7 +97,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
                 ci.cancel(); // Cancelamos para que Vanilla no intente hacer su propia lógica offline
                 
             } catch (Exception e) {
-                DirectAuth.LOGGER.error("Error handshake premium: {}", e.getMessage());
+                DirectAuth.LOGGER.error("DirectAuth: Premium handshake error: {}", e.getMessage());
             }
         }
     }

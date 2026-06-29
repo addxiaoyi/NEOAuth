@@ -81,7 +81,7 @@ public class PremiumCommand {
                     boolean migrationSuccess = MigrationManager.migratePlayerData(player, formattedUUID);
                     
                     if (!migrationSuccess) {
-                        DirectAuth.LOGGER.error("Error migrando datos para {}", username);
+                        DirectAuth.LOGGER.error("DirectAuth: Error migrating data for {}", username);
                     }
 
                     // Actualizar DB

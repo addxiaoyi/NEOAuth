@@ -61,15 +61,15 @@ public class DatabaseManager {
                 // Si la columna ya existe, SQLite lanzará un error que ignoraremos de forma segura.
                 try {
                     stmt.execute("ALTER TABLE users ADD COLUMN registrationIp TEXT;");
-                    LOGGER.info("DirectAuth: Base de datos actualizada (Columna IP añadida).");
+                    LOGGER.info("DirectAuth: Database updated (IP column added).");
                 } catch (SQLException ignored) {
                     // La columna ya existe, no hacemos nada.
                 }
             }
         } catch (ClassNotFoundException e) {
-            throw new RuntimeException("CRITICAL: No se encontró el driver de SQLite. Asegúrate de que la librería está incluida en el mod.", e);
+            throw new RuntimeException("CRITICAL: SQLite driver not found. Make sure the library is bundled with the mod.", e);
         } catch (SQLException e) {
-            throw new RuntimeException("CRITICAL: Error al conectar con la base de datos SQLite.", e);
+            throw new RuntimeException("CRITICAL: Failed to connect to the SQLite database.", e);
         }
     }
 
@@ -195,7 +195,7 @@ public class DatabaseManager {
 
     // --- MIGRACIÓN (Solo se ejecuta una vez) ---
     private void migrateFromJson(Path jsonPath) {
-        System.out.println("DirectAuth: Migrando base de datos JSON a SQLite...");
+        System.out.println("DirectAuth: Migrating JSON database to SQLite...");
         try {
             Gson gson = new Gson();
             String jsonContent = Files.readString(jsonPath);
@@ -226,10 +226,10 @@ public class DatabaseManager {
             
             // Renombrar el JSON para no volver a importarlo
             Files.move(jsonPath, jsonPath.resolveSibling("DirectAuth_users.json.MIGRATED"));
-            System.out.println("DirectAuth: Migración completada.");
+            System.out.println("DirectAuth: Migration completed.");
             
         } catch (IOException | SQLException e) {
-            System.err.println("Error migrando JSON: " + e.getMessage());
+            System.err.println("DirectAuth: Error migrating JSON: " + e.getMessage());
         }
     }
 }
