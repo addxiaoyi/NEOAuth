@@ -94,6 +94,9 @@ public class DirectAuthCommand {
                 .resolve("serverconfig").resolve("DirectAuth-config.json");
         DirectAuth.initConfig(configPath);
 
+        // Reaplicar el intervalo de limpieza de sesiones (init() es idempotente: reprograma la tarea)
+        DirectAuth.getLoginManager().init(DirectAuth.getConfig().sessionCleanupInterval);
+
         context.getSource().sendSuccess(() -> Component.literal(
             DirectAuth.getConfig().getLang().msgConfigReloaded
         ), true);

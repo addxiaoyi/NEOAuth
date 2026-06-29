@@ -10,6 +10,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import com.marcp.directauth.data.UserData; // Asegúrate de importar esto
 
@@ -39,24 +40,29 @@ public class LoginManager {
     // 1. Definimos el Scheduler (1 hilo es suficiente para mantenimiento)
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
+    // Referencia a la tarea de limpieza recurrente, para poder reprogramarla en un reload
+    private ScheduledFuture<?> cleanupTask;
+
     public LoginManager() {
         // Constructor vacío, la inicialización se hace en init()
     }
-    
+
     /**
-     * Inicializa la tarea de limpieza con el intervalo configurado.
+     * Inicializa (o reprograma) la tarea de limpieza con el intervalo configurado.
+     * Es idempotente: cancela la tarea anterior antes de programar la nueva, así que
+     * puede llamarse de forma segura tanto al arrancar como en cada /directauth reload.
      * Debe llamarse DESPUÉS de cargar la configuración.
      */
     public void init(int cleanupIntervalMinutes) {
         if (cleanupIntervalMinutes <= 0) cleanupIntervalMinutes = 10; // Fallback seguro
-        
+
+        // Cancelar la tarea previa para no apilar limpiezas recurrentes en cada reload
+        if (cleanupTask != null) cleanupTask.cancel(false);
+
         // Ejecutar cada X minutos, con un delay inicial igual al intervalo
-        scheduler.scheduleAtFixedRate(this::cleanupExpiredSessions, cleanupIntervalMinutes, cleanupIntervalMinutes, TimeUnit.MINUTES);
+        cleanupTask = scheduler.scheduleAtFixedRate(this::cleanupExpiredSessions, cleanupIntervalMinutes, cleanupIntervalMinutes, TimeUnit.MINUTES);
     }
-    
-    private static final long COOLDOWN_MS = 3000; // 3 segundos entre intentos
-    private static final int MAX_ATTEMPTS = 5; // Máximo 5 intentos antes de kick
-    
+
     // Configuración de PBKDF2
     private static final int ITERATIONS = 100000;
     private static final int KEY_LENGTH = 256;
@@ -195,7 +201,7 @@ public class LoginManager {
         
         if (lastAttempt != null) {
             long elapsed = System.currentTimeMillis() - lastAttempt;
-            return elapsed >= COOLDOWN_MS;
+            return elapsed >= com.marcp.directauth.DirectAuth.getConfig().loginCooldownMs;
         }
         return true;
     }
@@ -215,7 +221,7 @@ public class LoginManager {
     }
     
     public boolean hasExceededMaxAttempts(ServerPlayer player) {
-        return getFailedAttempts(player) >= MAX_ATTEMPTS;
+        return getFailedAttempts(player) >= com.marcp.directauth.DirectAuth.getConfig().maxLoginAttempts;
     }
 
     // MÉTODOS PARA LA PRE-CARGA

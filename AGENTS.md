@@ -136,7 +136,6 @@ Gson, pretty-printed. Loaded once on `ServerStartedEvent`; missing fields are fi
 | Password | `minPasswordLength` (4), `maxPasswordLength` (32) |
 | Login flood | `maxLoginAttempts` (5), `loginCooldownMs` (3000), `loginTimeout` (60s) |
 | Anti-bot | `registrationDelay` (1s), `maxAccountsPerIP` (5) |
-| Restrictions | `freezeUnauthenticated` (true), `blockChat` (true), `blockInteractions` (true) |
 | Migration | `migrationMap` — directory → `MigrationMode` |
 
 ### 5.2 `LangConfig` (`world/serverconfig/DirectAuth-lang-<code>.json`)

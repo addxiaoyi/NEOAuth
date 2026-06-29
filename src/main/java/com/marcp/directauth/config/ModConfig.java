@@ -30,11 +30,6 @@ public class ModConfig {
     // Anti-Bot Settings
     public int registrationDelay = 1; // 1 second wait before registering
     public int maxAccountsPerIP = 5;  // Max 5 accounts per IP
-    
-    // Restriction Settings
-    public boolean freezeUnauthenticated = true;
-    public boolean blockChat = true;
-    public boolean blockInteractions = true;
 
     // --- Data Migration Settings ---
     // Mapa: Ruta de la carpeta -> Modo de migración
