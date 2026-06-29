@@ -4,70 +4,128 @@
 
 ![Build Status](https://github.com/marc-perez-dev/DirectAuth/actions/workflows/build.yml/badge.svg)
 
-DirectAuth is a server-side authentication mod for Minecraft NeoForge 1.21.1. It provides a secure, offline-mode authentication system with optional auto-login capabilities for online users.
+DirectAuth is a **server-side** authentication mod for Minecraft NeoForge 1.21.1. It provides a secure login system for offline-mode servers, with optional auto-login for players who own a legitimate Minecraft account.
 
-This mod relies on a local SQLite database and handles all I/O operations asynchronously to ensure server performance remains unaffected during player logins.
+It is strictly server-side: clients do **not** need to install this mod to join. Players can connect with any vanilla client.
+
+All database operations run asynchronously, so the main server thread never freezes during logins.
 
 ## Key Features
 
-* **Security**: User passwords are protected using PBKDF2WithHmacSHA256 hashing with unique salts per user.
-* **Asynchronous Processing**: Database queries run on a separate thread pool to prevent main thread blocking (lag) during authentication checks.
-* **Online Auto-Login**: Users with valid Mojang/Microsoft accounts can verify their status to bypass the login command in future sessions.
-* **Smart Data Migration (BETA)**: When a user switches from offline to online mode, the mod automatically migrates their data to the new Mojang UUID.
-    * *Supported by default:* Inventory, Ender Chest, Advancements, Statistics, Potions/Health.
-    * *Mod Support:* Server admins can configure `foldersToMigrate` in the config file to support data from other mods (e.g., `curios`, `astralsorcery`).
-    * *Safety:* Always backup your world before performing migrations on heavily modded servers.
-* **Strict Restrictions**: Unauthenticated players are restricted from moving, chatting, interacting with blocks, dropping items, or regenerating health.
-* **Zero Configuration Database**: Uses an embedded SQLite database. No external MySQL server setup is required.
-
-### ⚠️ IMPORTANT WARNING: ONLINE MODE MIGRATION
-
-**Before using `/online`:**
-Al activar el modo online, tu UUID cambiará y tus datos serán migrados. Por defecto, DirectAuth solo migra datos Vanilla (Inventario, Estadísticas, Logros).
-
-**If you use other mods** that save their own data (e.g., Astral Sorcery, FTB Chunks), the server administrator **MUST** add those folder names to the `foldersToMigrate` list in `directauth-config.json` **BEFORE** players run this command. Failure to do so may result in the loss of mod-specific progress. **It is highly recommended to backup the world before migrating.**
+* **Server-Side Only**: Install it on your server and players join with any vanilla client. Nothing to install client-side.
+* **Zero-Configuration Database**: Uses an embedded SQLite database. No MySQL or external database server required.
+* **No Lag**: All database I/O is performed asynchronously on a separate thread pool.
+* **Strong Security**: Passwords are hashed with PBKDF2WithHmacSHA256 using a unique salt per user.
+* **Online Auto-Login**: Players with a legitimate Mojang/Microsoft account can use `/online` to verify their account and skip typing passwords in future sessions.
+* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again.
+* **Anti-Bot Protection**: Configurable registration delay and a maximum number of accounts per IP address.
+* **Strict Restrictions**: Unauthenticated players cannot move, chat, interact with blocks/entities, drop or pick up items, attack, gain XP, or regenerate health.
+* **Smart Data Migration**: When a player switches from offline to online mode their UUID changes, so the mod automatically migrates their data to the new UUID (see below).
+* **Localization**: Ships with English (`en`) and Spanish (`es`); fully customizable message strings.
 
 ## Commands
 
+### Player commands
+
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| **/register** | `/register <password>` | Creates a new account. Required upon first connection. |
-| **/login** | `/login <password>` | Authenticates the user session. |
-| **/online** | `/online` | **(BETA)** Verifies the account with Mojang servers and enables auto-login. **Warning:** This migrates player data to a new UUID. |
-| **/directauth** | `/directauth online <user> <true/false>` | Admin command to manually toggle a player's online-mode status. |
+| **/register** | `/register <password>` | Creates a new account. Required on first connection. |
+| **/login** | `/login <password>` | Authenticates your session. |
+| **/logout** | `/logout` | Logs you out (disconnects you from the server). |
+| **/changepassword** | `/changepassword <oldPassword> <newPassword>` | Changes your password. Requires being logged in. |
+| **/unregister** | `/unregister <password>` | Permanently deletes your own account (confirms with your password). |
+| **/online** | `/online <password>` | Verifies your account against Mojang's servers to enable auto-login. **Migrates your data to a new UUID** — see the warning below. |
+| **/directauth confirm** | `/directauth confirm` | Confirms a pending action when the mod requests it. |
+
+### Admin commands (require OP level 4)
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| **/directauth online** | `/directauth online <user> <true\|false>` | Manually toggles a player's online-mode status. |
+| **/directauth resetpass** | `/directauth resetpass <user> <newPassword>` | Resets a player's password. |
+| **/directauth unregister** | `/directauth unregister <user>` | Force-deletes a player's account (and kicks them if online). |
+| **/directauth reload** | `/directauth reload` | Reloads the config and language files from disk at runtime — no server restart needed. |
+| **/directauth resetlang** | `/directauth resetlang` | Deletes the language files so they regenerate from the mod's built-in defaults (discards manual edits). |
+
+## ⚠️ Important: Online Mode Migration
+
+When a player runs `/online`, their UUID changes from the offline UUID to their real Mojang UUID, and DirectAuth migrates their data to the new UUID.
+
+**By default** the mod already migrates vanilla data (inventory, ender chest, advancements, statistics) **and** a few common mods (graves/deaths, FTB Quests, SkinRestorer).
+
+If your server uses **other** mods that store per-player data (e.g. Curios, Astral Sorcery, FTB Teams), the server administrator must add those folder names to the migration config **before** players run `/online`. Otherwise that mod-specific progress may be lost.
+
+> **Always back up your world before migrating on a heavily modded server.**
 
 ## Installation
 
-1.  Download the `.jar` file.
-2.  Place it in the `mods` folder of your NeoForge 1.21.1 server.
-3.  Restart the server.
+1. Download the `.jar` file.
+2. Place it in the `mods` folder of your NeoForge 1.21.1 server.
+3. Restart the server.
 
-The configuration file will be generated at `world/serverconfig/directauth-config.json`.
-The database file will be created at `world/serverconfig/directauth.db`.
+On first launch the following files are generated:
+
+* Config: `world/serverconfig/DirectAuth-config.json`
+* Language files: `world/serverconfig/DirectAuth-lang-en.json` and `DirectAuth-lang-es.json`
+* Database: `world/serverconfig/directauth.db`
 
 ## Configuration
 
-You can modify `world/serverconfig/directauth-config.json` to adjust:
-* Authentication timeout limits (kick timer).
-* Password length requirements (min/max).
-* Login cooldowns and max attempts.
-* Specific restrictions (chat, movement, block interaction).
-* Translation strings (default messages).
-* **Data Migration List**: You can add custom folder names (e.g., `curios`, `ftbteams`) to `foldersToMigrate` to ensure mod-specific data is transferred when a player switches to Online Mode.
+Edit `world/serverconfig/DirectAuth-config.json` to customize:
+
+* **Language**: `language` (`"en"` or `"es"`).
+* **Security**: `minPasswordLength`, `maxPasswordLength`, `maxLoginAttempts`, `loginCooldownMs`, `loginTimeout` (seconds before a non-authenticated player is kicked).
+* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect) and `sessionCleanupInterval` (minutes between cleanups of expired sessions).
+* **Anti-Bot**: `registrationDelay` (seconds to wait before a fresh player can register) and `maxAccountsPerIP`.
+* **Data Migration**: `migrationMap` — a map of *folder name → migration mode*. To support an extra mod, add its data folder there. Available modes:
+    * `RENAME` — rename a single file that is named after the UUID (most vanilla data, SkinRestorer).
+    * `DIRECTORY` — move/rename a whole folder named after the UUID (e.g. graves).
+    * `TEXT_REPLACE` — rename the file **and** replace UUID strings inside its contents (e.g. FTB Quests).
+
+  Example:
+
+  ```json
+  "migrationMap": {
+    "playerdata": "RENAME",
+    "stats": "RENAME",
+    "advancements": "RENAME",
+    "deaths": "DIRECTORY",
+    "ftbquests": "TEXT_REPLACE",
+    "skinrestorer": "RENAME"
+  }
+  ```
+
+Message strings can be edited in the `DirectAuth-lang-*.json` files.
 
 ## Troubleshooting (FAQ)
 
 **Q: I keep getting teleported back when I move / I can't eat or regenerate health.**
-A: You are not authenticated yet. Please use `/register <password>` (first time) or `/login <password>`.
+A: You aren't authenticated yet. Use `/register <password>` (first time) or `/login <password>`.
 
-**Q: I lost my items from [Mod Name] after using `/online`.**
-A: The server administrator likely hasn't configured the `foldersToMigrate` list to include that mod's data folder. Please contact your admin.
+**Q: I lost my items from [some mod] after using `/online`.**
+A: The server administrator likely hadn't added that mod's data folder to `migrationMap`. Contact your admin.
 
-## Compatibility Note
+## Technical Details
 
-DirectAuth uses a local SQLite database stored within the world directory.
-* **Supported:** Single dedicated servers, local LAN worlds.
-* **Not Supported:** BungeeCord/Velocity networks requiring data synchronization across multiple server instances (e.g., Lobby to Survival transfers).
+* **Hashing**: PBKDF2WithHmacSHA256 with a unique salt per user.
+* **Storage**: SQLite at `world/serverconfig/directauth.db` — no external database server. A legacy `DirectAuth_users.json` is migrated automatically on first run if present.
+* **Session Management**: Sessions are validated against the internal database (and Mojang's session servers for online users).
+* **Protection**: The login listener is injected at high priority to prevent unauthorized packet processing.
+
+## Compatibility
+
+* **Loader**: NeoForge 1.21.1
+* **Side**: Server-side only — works with any vanilla client and can be included in any modpack.
+* **Supported**: Dedicated servers and local LAN worlds.
+* **Not supported**: BungeeCord/Velocity networks that need player data synchronized across multiple server instances (e.g. Lobby → Survival transfers), since data is stored in the local world directory.
+
+## 💖 Support the Project
+
+DirectAuth is open-source and free to use. If you appreciate the work that goes into building and maintaining it, please consider supporting me!
+
+☕ [Sponsor me on GitHub](https://github.com/sponsors/marc-perez-dev)
+
+**Source Code & Issues:** [GitHub Repository](https://github.com/marc-perez-dev/DirectAuth) · [Report Issues](https://github.com/marc-perez-dev/DirectAuth/issues)
 
 ## License
 
