@@ -32,6 +32,8 @@ public class LangConfig {
     public String errMaxAttempts = "§cToo many failed attempts.";
     public String msgAuthenticated = "§a✓ Authenticated successfully.";
     public String errWrongPassword = "§cIncorrect password (%d/%d attempts).";
+    // Used where there is no attempt tracking (e.g. /unregister, /online), so it omits the counter.
+    public String errWrongPasswordSimple = "§cIncorrect password.";
     public String msgTimeout = "§cLogin timed out.\n§7Please authenticate faster next time.";
     
     // --- Online Mode (formerly Premium) Messages ---
@@ -59,7 +61,7 @@ public class LangConfig {
     public String errAdminUsageReset = "§cUsage: /directauth resetpass <user> <newPassword>";
     public String errAdminUsageUnregister = "§cUsage: /directauth unregister <user>";
     public String msgConfigReloaded = "§a✓ DirectAuth configuration reloaded.";
-    public String msgLangReset = "§a✓ DirectAuth language files reset to defaults.";
+    public String msgLangReset = "§a✓ DirectAuth built-in (English/Spanish) language files reset to defaults.";
 
     // --- Restriction Messages ---
     public String msgNoDrop = "§cYou cannot drop items before authenticating.";
@@ -82,6 +84,21 @@ public class LangConfig {
     public String msgAdminUnregisterSuccess = "§aUser %s has been removed from the database.";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    /**
+     * Formats a (possibly admin-edited) message template, falling back to the raw template
+     * if it contains an invalid format specifier (e.g. a stray '%'). This prevents a typo
+     * in a language file from throwing an exception in the middle of a command.
+     */
+    public static String format(String template, Object... args) {
+        try {
+            return String.format(template, args);
+        } catch (java.util.IllegalFormatException e) {
+            com.marcp.directauth.DirectAuth.LOGGER.warn(
+                "DirectAuth: malformed format string in language file: {}", template);
+            return template;
+        }
+    }
 
     public static LangConfig load(Path langPath, String language) {
         if (Files.exists(langPath)) {
@@ -141,6 +158,7 @@ public class LangConfig {
             errMaxAttempts = "§cDemasiados intentos fallidos.";
             msgAuthenticated = "§a✓ Autenticado exitosamente.";
             errWrongPassword = "§cContraseña incorrecta (%d/%d intentos).";
+            errWrongPasswordSimple = "§cContraseña incorrecta.";
             msgTimeout = "§cTiempo de espera agotado.\n§7Por favor autentícate más rápido la próxima vez.";
 
             // --- Online Mode (formerly Premium) Messages ---
@@ -168,7 +186,7 @@ public class LangConfig {
             errAdminUsageReset = "§cUso: /directauth resetpass <usuario> <nueva_contraseña>";
             errAdminUsageUnregister = "§cUso: /directauth unregister <usuario>";
             msgConfigReloaded = "§a✓ Configuración de DirectAuth recargada.";
-            msgLangReset = "§a✓ Archivos de idioma de DirectAuth restablecidos a los valores por defecto.";
+            msgLangReset = "§a✓ Archivos de idioma integrados de DirectAuth (Inglés/Español) restablecidos a los valores por defecto.";
 
             // --- Restriction Messages ---
             msgNoDrop = "§cNo puedes soltar objetos antes de autenticarte.";

@@ -29,6 +29,11 @@ version="${mod_version}" #mandatory
 # A display name for the mod
 displayName="${mod_name}" #mandatory
 
+# This is a server-side mod: it has no client code and is only meant to run on
+# (dedicated) servers. IGNORE_ALL_VERSION lets unmodded/vanilla clients connect to
+# a server running it without needing the mod installed locally.
+displayTest="IGNORE_ALL_VERSION"
+
 # A URL to query for updates for this mod. See the JSON update specification https://docs.neoforged.net/docs/misc/updatechecker/
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 

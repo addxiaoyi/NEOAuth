@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
+import com.marcp.directauth.config.LangConfig;
 import com.marcp.directauth.data.UserData;
 import com.marcp.directauth.events.PlayerRestrictionHandler;
 import net.minecraft.commands.CommandSourceStack;
@@ -134,7 +135,7 @@ public class LoginCommand {
         } else {
             DirectAuth.getLoginManager().recordLoginAttempt(player, false);
             int attempts = DirectAuth.getLoginManager().getFailedAttempts(player);
-            player.sendSystemMessage(Component.literal(String.format(DirectAuth.getConfig().getLang().errWrongPassword, attempts, DirectAuth.getConfig().maxLoginAttempts)));
+            player.sendSystemMessage(Component.literal(LangConfig.format(DirectAuth.getConfig().getLang().errWrongPassword, attempts, DirectAuth.getConfig().maxLoginAttempts)));
             return 0;
         }
     }

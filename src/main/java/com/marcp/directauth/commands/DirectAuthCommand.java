@@ -3,6 +3,7 @@ package com.marcp.directauth.commands;
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.ConfirmationManager;
 import com.marcp.directauth.auth.LoginManager;
+import com.marcp.directauth.config.LangConfig;
 import com.marcp.directauth.data.UserData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -131,7 +132,7 @@ public class DirectAuthCommand {
         
         UserData userData = DirectAuth.getDatabase().getUser(username);
         if (userData == null) {
-            context.getSource().sendFailure(Component.literal(String.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
+            context.getSource().sendFailure(Component.literal(LangConfig.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
             return 0;
         }
 
@@ -140,7 +141,7 @@ public class DirectAuthCommand {
         
         DirectAuth.getDatabase().updateUser(username, userData);
         context.getSource().sendSuccess(() -> Component.literal(
-            String.format(DirectAuth.getConfig().getLang().msgAdminPremiumUpdated, username, newValue)
+            LangConfig.format(DirectAuth.getConfig().getLang().msgAdminPremiumUpdated, username, newValue)
         ), true);
         return 1;
     }
@@ -151,7 +152,7 @@ public class DirectAuthCommand {
         
         UserData userData = DirectAuth.getDatabase().getUser(username);
         if (userData == null) {
-            context.getSource().sendFailure(Component.literal(String.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
+            context.getSource().sendFailure(Component.literal(LangConfig.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
             return 0;
         }
 
@@ -159,7 +160,7 @@ public class DirectAuthCommand {
         DirectAuth.getDatabase().updateUser(username, userData);
         
         context.getSource().sendSuccess(() -> Component.literal(
-            String.format(DirectAuth.getConfig().getLang().msgAdminResetSuccess, username)
+            LangConfig.format(DirectAuth.getConfig().getLang().msgAdminResetSuccess, username)
         ), true);
         return 1;
     }
@@ -168,7 +169,7 @@ public class DirectAuthCommand {
         String username = StringArgumentType.getString(context, "user");
         
         if (!DirectAuth.getDatabase().userExists(username)) {
-            context.getSource().sendFailure(Component.literal(String.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
+            context.getSource().sendFailure(Component.literal(LangConfig.format(DirectAuth.getConfig().getLang().errAdminUserNotFound, username)));
             return 0;
         }
 
@@ -182,7 +183,7 @@ public class DirectAuthCommand {
         }
 
         context.getSource().sendSuccess(() -> Component.literal(
-            String.format(DirectAuth.getConfig().getLang().msgAdminUnregisterSuccess, username)
+            LangConfig.format(DirectAuth.getConfig().getLang().msgAdminUnregisterSuccess, username)
         ), true);
         return 1;
     }
