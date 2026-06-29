@@ -2,8 +2,12 @@ package com.marcp.directauth.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.*;
 import java.nio.file.*;
+import java.util.Map;
 
 public class LangConfig {
     // --- General Messages ---
@@ -52,6 +56,10 @@ public class LangConfig {
     public String msgAdminPremiumUpdated = "§aOnline Mode status updated for %s: %s";
     public String errAdminUserNotFound = "§cUser %s does not exist in the database.";
     public String errAdminUsage = "§cUsage: /directauth online <user> <true|false>";
+    public String errAdminUsageReset = "§cUsage: /directauth resetpass <user> <newPassword>";
+    public String errAdminUsageUnregister = "§cUsage: /directauth unregister <user>";
+    public String msgConfigReloaded = "§a✓ DirectAuth configuration reloaded.";
+    public String msgLangReset = "§a✓ DirectAuth language files reset to defaults.";
 
     // --- Restriction Messages ---
     public String msgNoDrop = "§cYou cannot drop items before authenticating.";
@@ -76,23 +84,36 @@ public class LangConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static LangConfig load(Path langPath, String language) {
-        try {
-            if (Files.exists(langPath)) {
-                Reader reader = Files.newBufferedReader(langPath);
-                LangConfig config = GSON.fromJson(reader, LangConfig.class);
-                reader.close();
-                // We re-save to update with any new keys if the mod was updated
-                config.save(langPath);
+        if (Files.exists(langPath)) {
+            try (Reader reader = Files.newBufferedReader(langPath)) {
+                JsonElement parsed = JsonParser.parseReader(reader);
+                JsonObject fileJson = (parsed != null && parsed.isJsonObject())
+                        ? parsed.getAsJsonObject() : new JsonObject();
+
+                // Start from the correct defaults for this language, then overlay the on-disk
+                // values. This guarantees keys added in a mod update appear in the right
+                // language instead of falling back to the English field defaults.
+                LangConfig base = new LangConfig();
+                base.setDefaults(language);
+                JsonObject merged = GSON.toJsonTree(base).getAsJsonObject();
+                for (Map.Entry<String, JsonElement> entry : fileJson.entrySet()) {
+                    merged.add(entry.getKey(), entry.getValue());
+                }
+
+                LangConfig config = GSON.fromJson(merged, LangConfig.class);
+                config.save(langPath); // persist any newly added keys
                 return config;
-            } else {
+            } catch (Exception e) {
+                System.err.println("DirectAuth: Error loading lang config: " + e.getMessage());
                 LangConfig config = new LangConfig();
                 config.setDefaults(language);
-                config.save(langPath);
                 return config;
             }
-        } catch (IOException e) {
-            System.err.println("Error loading lang config: " + e.getMessage());
-            return new LangConfig();
+        } else {
+            LangConfig config = new LangConfig();
+            config.setDefaults(language);
+            config.save(langPath);
+            return config;
         }
     }
 
@@ -144,6 +165,10 @@ public class LangConfig {
             msgAdminPremiumUpdated = "§aEstado de Modo Online actualizado para %s: %s";
             errAdminUserNotFound = "§cEl usuario %s no existe en la base de datos.";
             errAdminUsage = "§cUso: /directauth online <usuario> <true|false>";
+            errAdminUsageReset = "§cUso: /directauth resetpass <usuario> <nueva_contraseña>";
+            errAdminUsageUnregister = "§cUso: /directauth unregister <usuario>";
+            msgConfigReloaded = "§a✓ Configuración de DirectAuth recargada.";
+            msgLangReset = "§a✓ Archivos de idioma de DirectAuth restablecidos a los valores por defecto.";
 
             // --- Restriction Messages ---
             msgNoDrop = "§cNo puedes soltar objetos antes de autenticarte.";

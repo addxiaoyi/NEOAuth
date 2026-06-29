@@ -12,6 +12,11 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class DirectAuthCommand {
     
@@ -30,12 +35,11 @@ public class DirectAuthCommand {
         );
 
         // --- Subcomandos: ADMIN (Requieren OP nivel 4) ---
-        var adminNode = Commands.literal("admin") // Opcional: agrupar bajo 'admin' o dejarlo en la raíz
-                .requires(source -> source.hasPermission(4));
-        
+
         // 1. Online Mode Toggle (Antiguo PremiumAdmin)
         root.then(Commands.literal("online")
             .requires(s -> s.hasPermission(4))
+            .executes(ctx -> usage(ctx, DirectAuth.getConfig().getLang().errAdminUsage))
             .then(Commands.argument("user", StringArgumentType.string())
                 .then(Commands.argument("value", BoolArgumentType.bool())
                     .executes(DirectAuthCommand::setOnlineMode)
@@ -46,6 +50,7 @@ public class DirectAuthCommand {
         // 2. Reset Password (Admin)
         root.then(Commands.literal("resetpass")
             .requires(s -> s.hasPermission(4))
+            .executes(ctx -> usage(ctx, DirectAuth.getConfig().getLang().errAdminUsageReset))
             .then(Commands.argument("user", StringArgumentType.string())
                 .then(Commands.argument("newPassword", StringArgumentType.word())
                     .executes(DirectAuthCommand::resetPassword)
@@ -56,12 +61,65 @@ public class DirectAuthCommand {
         // 3. Force Unregister (Admin)
         root.then(Commands.literal("unregister")
             .requires(s -> s.hasPermission(4))
+            .executes(ctx -> usage(ctx, DirectAuth.getConfig().getLang().errAdminUsageUnregister))
             .then(Commands.argument("user", StringArgumentType.string())
                 .executes(DirectAuthCommand::forceUnregister)
             )
         );
 
+        // 4. Reload config & language files from disk (Admin)
+        root.then(Commands.literal("reload")
+            .requires(s -> s.hasPermission(4))
+            .executes(DirectAuthCommand::reloadConfig)
+        );
+
+        // 5. Reset language files to the mod's built-in defaults (Admin)
+        root.then(Commands.literal("resetlang")
+            .requires(s -> s.hasPermission(4))
+            .executes(DirectAuthCommand::resetLang)
+        );
+
         dispatcher.register(root);
+    }
+
+    /** Sends a localized usage hint when an admin subcommand is called without its arguments. */
+    private static int usage(CommandContext<CommandSourceStack> context, String message) {
+        context.getSource().sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int reloadConfig(CommandContext<CommandSourceStack> context) {
+        Path configPath = context.getSource().getServer()
+                .getWorldPath(LevelResource.ROOT)
+                .resolve("serverconfig").resolve("DirectAuth-config.json");
+        DirectAuth.initConfig(configPath);
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            DirectAuth.getConfig().getLang().msgConfigReloaded
+        ), true);
+        return 1;
+    }
+
+    private static int resetLang(CommandContext<CommandSourceStack> context) {
+        Path serverConfig = context.getSource().getServer()
+                .getWorldPath(LevelResource.ROOT)
+                .resolve("serverconfig");
+
+        // Deleting the language files forces LangConfig.load() to regenerate them from the
+        // mod's built-in defaults (this discards any manual customizations in those files).
+        try {
+            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-en.json"));
+            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-es.json"));
+        } catch (IOException e) {
+            DirectAuth.LOGGER.error("DirectAuth: Failed to delete language files: {}", e.getMessage());
+        }
+
+        DirectAuth.initConfig(serverConfig.resolve("DirectAuth-config.json"));
+
+        context.getSource().sendSuccess(() -> Component.literal(
+            DirectAuth.getConfig().getLang().msgLangReset
+        ), true);
+        return 1;
     }
 
     private static int setOnlineMode(CommandContext<CommandSourceStack> context) {
