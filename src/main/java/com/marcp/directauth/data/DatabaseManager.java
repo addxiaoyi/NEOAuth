@@ -53,23 +53,31 @@ public class DatabaseManager {
                         "passwordHash TEXT NOT NULL, " +
                         "isPremium INTEGER DEFAULT 0, " +
                         "onlineUUID TEXT, " +
-                        "registrationIp TEXT" + // Nueva columna
+                        "registrationIp TEXT, " +
+                        "texturesValue TEXT, " +
+                        "texturesSignature TEXT" +
                         ");");
                 
                 // MIGRACIÓN PARA SERVIDORES ANTIGUOS
                 // Intentamos añadir la columna 'registrationIp' a la tabla existente.
                 // Si la columna ya existe, SQLite lanzará un error que ignoraremos de forma segura.
-                try {
-                    stmt.execute("ALTER TABLE users ADD COLUMN registrationIp TEXT;");
-                    LOGGER.info("DirectAuth: Database updated (IP column added).");
-                } catch (SQLException ignored) {
-                    // La columna ya existe, no hacemos nada.
-                }
+                addColumnIfMissing(stmt, "registrationIp", "TEXT");
+                addColumnIfMissing(stmt, "texturesValue", "TEXT");
+                addColumnIfMissing(stmt, "texturesSignature", "TEXT");
             }
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("CRITICAL: SQLite driver not found. Make sure the library is bundled with the mod.", e);
         } catch (SQLException e) {
             throw new RuntimeException("CRITICAL: Failed to connect to the SQLite database.", e);
+        }
+    }
+
+    private void addColumnIfMissing(Statement statement, String name, String type) throws SQLException {
+        try {
+            statement.execute("ALTER TABLE users ADD COLUMN " + name + " " + type + ";");
+            LOGGER.info("NEOauth: Database column added: {}", name);
+        } catch (SQLException exception) {
+            if (!exception.getMessage().toLowerCase().contains("duplicate column")) throw exception;
         }
     }
 
@@ -132,6 +140,7 @@ public class DatabaseManager {
                 UserData data = new UserData(rs.getString("username"), rs.getString("passwordHash"));
                 data.setPremium(rs.getInt("isPremium") == 1);
                 data.setOnlineUUID(rs.getString("onlineUUID"));
+                data.setTextures(rs.getString("texturesValue"), rs.getString("texturesSignature"));
                 return data;
             }
         } catch (SQLException e) {
@@ -154,19 +163,23 @@ public class DatabaseManager {
     }
 
     public CompletableFuture<Boolean> createPremiumUserIfAbsentAsync(
-            String username, String passwordHash, String ip, String onlineUuid) {
+            String username, String passwordHash, String ip, String onlineUuid,
+            String texturesValue, String texturesSignature) {
         return CompletableFuture.supplyAsync(
-                () -> createPremiumUserIfAbsent(username, passwordHash, ip, onlineUuid), dbExecutor);
+                () -> createPremiumUserIfAbsent(username, passwordHash, ip, onlineUuid, texturesValue, texturesSignature), dbExecutor);
     }
 
-    private boolean createPremiumUserIfAbsent(String username, String passwordHash, String ip, String onlineUuid) {
-        String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) "
-                + "VALUES(?,?,1,?,?) ON CONFLICT(username) DO NOTHING";
+    private boolean createPremiumUserIfAbsent(String username, String passwordHash, String ip, String onlineUuid,
+                                              String texturesValue, String texturesSignature) {
+        String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp, texturesValue, texturesSignature) "
+                + "VALUES(?,?,1,?,?,?,?) ON CONFLICT(username) DO NOTHING";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());
             pstmt.setString(2, passwordHash);
             pstmt.setString(3, onlineUuid);
             pstmt.setString(4, ip);
+            pstmt.setString(5, texturesValue);
+            pstmt.setString(6, texturesSignature);
             return pstmt.executeUpdate() == 1;
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to create premium account " + username, e);
@@ -199,12 +212,14 @@ public class DatabaseManager {
     }
 
     public void updateUser(String username, UserData data) {
-        String sql = "UPDATE users SET passwordHash = ?, isPremium = ?, onlineUUID = ? WHERE username = ?";
+        String sql = "UPDATE users SET passwordHash = ?, isPremium = ?, onlineUUID = ?, texturesValue = ?, texturesSignature = ? WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, data.getPasswordHash());
             pstmt.setInt(2, data.isPremium() ? 1 : 0);
             pstmt.setString(3, data.getOnlineUUID());
-            pstmt.setString(4, username.toLowerCase());
+            pstmt.setString(4, data.getTexturesValue());
+            pstmt.setString(5, data.getTexturesSignature());
+            pstmt.setString(6, username.toLowerCase());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();

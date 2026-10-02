@@ -5,6 +5,7 @@ import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.yggdrasil.ProfileResult;
 import java.net.InetSocketAddress;
 import java.util.UUID;
@@ -45,6 +46,8 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
     @Unique
     private volatile UserData directAuth$loginData;
+    @Unique
+    private volatile GameProfile directAuth$cachedPremiumProfile;
 
     @Unique
     private volatile boolean directAuth$automaticPremiumProbe;
@@ -100,6 +103,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
         if (data != null && data.isPremium() && data.getOnlineUUID() != null) {
             try {
                 premiumUuid = UUID.fromString(data.getOnlineUUID());
+                this.directAuth$cachedPremiumProfile = directAuth$profileWithCachedTextures(premiumUuid, username, data);
             } catch (IllegalArgumentException exception) {
                 DirectAuth.LOGGER.error("Invalid stored premium UUID for {}", username, exception);
                 return;
@@ -194,7 +198,10 @@ public abstract class MixinServerLoginPacketListenerImpl {
                 throw new IllegalStateException("Login manager is not initialized");
             }
             DirectAuth.getLoginManager().markPremiumPasswordFallback(premiumUuid);
-            this.directAuth$startClientVerification(new GameProfile(premiumUuid, username));
+            GameProfile fallbackProfile = this.directAuth$cachedPremiumProfile != null
+                    ? this.directAuth$cachedPremiumProfile
+                    : new GameProfile(premiumUuid, username);
+            this.directAuth$startClientVerification(fallbackProfile);
             DirectAuth.LOGGER.warn(
                     "Mojang verification failed for known premium player {}; retaining UUID {} for password login",
                     username, premiumUuid);
@@ -261,6 +268,14 @@ public abstract class MixinServerLoginPacketListenerImpl {
             return;
         }
 
+        if (this.directAuth$premiumUuid != null) {
+            this.directAuth$cacheTextures(profile);
+            if (this.directAuth$loginData != null && this.requestedUsername != null) {
+                DirectAuth.getDatabase().updateUserAsync(this.requestedUsername, this.directAuth$loginData);
+            }
+            return;
+        }
+
         if (this.directAuth$isStartingPremiumFallback || !this.directAuth$automaticPremiumProbe) return;
         if (this.directAuth$isStartingVerifiedProfile) return;
         if (this.directAuth$automaticPremiumRegistrationStarted) {
@@ -282,8 +297,29 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         this.directAuth$automaticPremiumRegistrationStarted = true;
+        this.directAuth$cacheTextures(profile);
         ci.cancel();
         this.directAuth$completeAutomaticPremiumRegistration(profile);
+    }
+
+    @Unique
+    private void directAuth$cacheTextures(GameProfile profile) {
+        if (this.directAuth$loginData == null) return;
+        var properties = profile.getProperties().get("textures");
+        if (properties == null || properties.isEmpty()) return;
+        Property textures = properties.iterator().next();
+        if (textures.hasSignature()) {
+            this.directAuth$loginData.setTextures(textures.value(), textures.signature());
+        }
+    }
+
+    @Unique
+    private static GameProfile directAuth$profileWithCachedTextures(UUID uuid, String username, UserData data) {
+        GameProfile profile = new GameProfile(uuid, username);
+        if (data.getTexturesValue() != null && data.getTexturesSignature() != null) {
+            profile.getProperties().put("textures", new Property("textures", data.getTexturesValue(), data.getTexturesSignature()));
+        }
+        return profile;
     }
 
     @Unique
@@ -302,7 +338,9 @@ public abstract class MixinServerLoginPacketListenerImpl {
             if (!migrated) return CompletableFuture.<UserData>completedFuture(null);
             String ip = this.directAuth$remoteAddress();
             String passwordHash = LoginManager.generateUnconfiguredPasswordHash();
-            return DirectAuth.getDatabase().createPremiumUserIfAbsentAsync(username, passwordHash, ip, targetUuid)
+            String texturesValue = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesValue();
+            String texturesSignature = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesSignature();
+            return DirectAuth.getDatabase().createPremiumUserIfAbsentAsync(username, passwordHash, ip, targetUuid, texturesValue, texturesSignature)
                     .thenCompose(created -> {
                         if (created) {
                             UserData createdUser = new UserData(username, passwordHash);
