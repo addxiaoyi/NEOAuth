@@ -277,6 +277,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         if (this.directAuth$isStartingPremiumFallback || !this.directAuth$automaticPremiumProbe) return;
+        if (this.directAuth$isStartingVerifiedProfile) return;
         if (this.directAuth$automaticPremiumRegistrationStarted) {
             ci.cancel();
             return;
