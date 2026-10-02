@@ -21,8 +21,20 @@ public class ConnectionHandler {
         // Inicializar la base de datos usando la ruta del nivel principal
         Path worldRoot = event.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
         DirectAuth.initDatabase(worldRoot);
-        // Inicializar configuración en world/serverconfig/DirectAuth-config.json
-        DirectAuth.initConfig(worldRoot.resolve("serverconfig").resolve("DirectAuth-config.json"));
+        Path configPath = event.getServer().getFile("config/Neoauth/Neoauth.toml");
+        Path legacyConfig = worldRoot.resolve("serverconfig").resolve("DirectAuth-config.json");
+        Path legacyLanguages = worldRoot.resolve("serverconfig");
+        DirectAuth.initConfig(configPath, legacyConfig, legacyLanguages);
+        if (java.nio.file.Files.exists(configPath)) {
+            try {
+                java.nio.file.Files.deleteIfExists(legacyConfig);
+                java.nio.file.Files.deleteIfExists(legacyLanguages.resolve("DirectAuth-lang-en.json"));
+                java.nio.file.Files.deleteIfExists(legacyLanguages.resolve("DirectAuth-lang-zh.json"));
+                java.nio.file.Files.deleteIfExists(legacyLanguages.resolve("DirectAuth-lang-es.json"));
+            } catch (java.io.IOException exception) {
+                DirectAuth.LOGGER.warn("NEOauth: Could not remove legacy JSON configuration files", exception);
+            }
+        }
         
         // Inicializar el Scheduler del LoginManager con la configuración cargada
         DirectAuth.getLoginManager().init(DirectAuth.getConfig().sessionCleanupInterval);

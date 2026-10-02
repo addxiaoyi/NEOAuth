@@ -3,125 +3,104 @@ package com.marcp.directauth.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.marcp.directauth.data.MigrationMode;
-
-import java.io.*;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.google.gson.JsonObject;
 
 public class ModConfig {
-    // --- General Settings ---
     public String language = "en";
-
-    // --- Session Settings ---
-    // Tiempo en segundos para mantener la sesión tras desconexión (Default: 1800s = 30 min)
     public int sessionGracePeriod = 1800;
-    
-    // Intervalo en minutos para limpiar sesiones caducadas de la memoria (Default: 10 min)
     public int sessionCleanupInterval = 10;
-
-    // Security Settings
     public int minPasswordLength = 4;
     public int maxPasswordLength = 32;
     public int maxLoginAttempts = 5;
     public long loginCooldownMs = 3000;
-    public int loginTimeout = 60; // Time in seconds before kick
-
-    // Known premium accounts may still use their stored password if Mojang
-    // cannot verify the encrypted login handshake.
+    public int loginTimeout = 60;
     public boolean premiumLoginFallbackOnFailure = true;
     public boolean premiumAutoLogin = true;
     public boolean premiumAutoRegister = true;
-    // Seconds to wait for Mojang before known premium accounts use password login.
     public int premiumVerificationTimeoutSeconds = 15;
-    
-    // Anti-Bot Settings
-    public int registrationDelay = 1; // 1 second wait before registering
-    // Maximum accounts registered from one IP. Set to 0 or a negative value to disable the limit.
+    public int registrationDelay = 1;
     public int maxAccountsPerIP = 5;
-
-    // --- Data Migration Settings ---
-    // Mapa: Ruta de la carpeta -> Modo de migración
     public Map<String, MigrationMode> migrationMap = new LinkedHashMap<>();
-    
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    
-    // Runtime reference to the loaded language config
     private transient LangConfig langConfig;
 
-    public ModConfig() {
-        setDefaults();
-    }
+    public ModConfig() { setDefaults(); }
 
     private void setDefaults() {
-        // Vanilla Data
         migrationMap.put("playerdata", MigrationMode.RENAME);
         migrationMap.put("stats", MigrationMode.RENAME);
         migrationMap.put("advancements", MigrationMode.RENAME);
-
-        // Mod Support - Defaults seguros
-        
-        // Sistema de tumbas (Carpeta con UUID)
         migrationMap.put("deaths", MigrationMode.DIRECTORY);
-        
-        // FTB Quests (Archivo .snbt con UUID, contenido interno SIN guiones)
-        // Nota: A veces está en 'ftbquests/player_data', pero cubrimos la raíz por si acaso
         migrationMap.put("ftbquests", MigrationMode.TEXT_REPLACE);
-        
-        // SkinRestorer (JSON simple, solo importa el nombre del archivo)
         migrationMap.put("skinrestorer", MigrationMode.RENAME);
     }
 
     public static ModConfig load(Path configPath) {
-        ModConfig config;
-        try {
-            if (Files.exists(configPath)) {
-                Reader reader = Files.newBufferedReader(configPath);
-                config = GSON.fromJson(reader, ModConfig.class);
-                reader.close();
-                
-                // Asegurar que el mapa no sea nulo si viene de una config vieja
-                if (config.migrationMap == null || config.migrationMap.isEmpty()) {
-                    config.migrationMap = new LinkedHashMap<>();
-                    config.setDefaults();
+        return load(configPath, null, null);
+    }
+
+    public static ModConfig load(Path configPath, Path legacyConfigPath, Path legacyLanguageDirectory) {
+        ModConfig config = new ModConfig();
+        NeoauthToml document = NeoauthToml.read(configPath);
+        if (Files.exists(configPath)) {
+            document.applySection("config", config);
+            document.applyMigrationMap(config.migrationMap);
+        } else if (legacyConfigPath != null && Files.exists(legacyConfigPath)) {
+            try (java.io.Reader reader = Files.newBufferedReader(legacyConfigPath)) {
+                Gson gson = new GsonBuilder().create();
+                ModConfig legacy = gson.fromJson(reader, ModConfig.class);
+                if (legacy != null) {
+                    config = legacy;
+                    if (config.migrationMap == null || config.migrationMap.isEmpty()) {
+                        config.migrationMap = new LinkedHashMap<>();
+                        config.setDefaults();
+                    }
                 }
-                config.save(configPath); // Guardar para actualizar campos nuevos
-            } else {
-                config = new ModConfig();
-                config.save(configPath);
+            } catch (Exception exception) {
+                throw new IllegalStateException("Unable to migrate legacy NEOauth configuration", exception);
             }
-        } catch (IOException e) {
-            System.err.println("Error loading config: " + e.getMessage());
-            config = new ModConfig();
         }
-        
-        // Load language (sin cambios)
-        Path dir = configPath.getParent();
-        LangConfig.load(dir.resolve("DirectAuth-lang-en.json"), "en");
-        LangConfig.load(dir.resolve("DirectAuth-lang-zh.json"), "zh");
-        LangConfig.load(dir.resolve("DirectAuth-lang-es.json"), "es");
-        String langFileName = "DirectAuth-lang-" + config.language + ".json";
-        Path langPath = dir.resolve(langFileName);
-        config.langConfig = LangConfig.load(langPath, config.language);
-        
+
+        LangConfig english = language(document, "en");
+        LangConfig chinese = language(document, "zh");
+        LangConfig spanish = language(document, "es");
+        if (legacyLanguageDirectory != null && !Files.exists(configPath)) {
+            english = LangConfig.load(legacyLanguageDirectory.resolve("DirectAuth-lang-en.json"), "en");
+            chinese = LangConfig.load(legacyLanguageDirectory.resolve("DirectAuth-lang-zh.json"), "zh");
+            spanish = LangConfig.load(legacyLanguageDirectory.resolve("DirectAuth-lang-es.json"), "es");
+        }
+        config.langConfig = switch (config.language.toLowerCase()) {
+            case "zh", "zh_cn", "zh-cn" -> chinese;
+            case "es" -> spanish;
+            default -> english;
+        };
+
+        NeoauthToml output = new NeoauthToml();
+        output.putSection("config", config);
+        for (Map.Entry<String, MigrationMode> entry : config.migrationMap.entrySet()) {
+            output.put("migrationMap." + entry.getKey(), entry.getValue());
+        }
+        output.putSection("messages.en", english);
+        output.putSection("messages.zh", chinese);
+        output.putSection("messages.es", spanish);
+        output.write(configPath);
         return config;
     }
 
-    public void save(Path configPath) {
-        try {
-            Files.createDirectories(configPath.getParent());
-            Writer writer = Files.newBufferedWriter(configPath);
-            GSON.toJson(this, writer);
-            writer.close();
-        } catch (IOException e) {
-            System.err.println("Error saving config: " + e.getMessage());
-        }
+    private static LangConfig language(NeoauthToml document, String code) {
+        LangConfig config = new LangConfig();
+        config.setDefaults(code);
+        document.applySection("messages." + code, config);
+        return config;
     }
-    
+
+    public void save(Path configPath) { load(configPath); }
+
     public LangConfig getLang() {
-        if (langConfig == null) {
-            langConfig = new LangConfig();
-        }
+        if (langConfig == null) langConfig = new LangConfig();
         return langConfig;
     }
 }

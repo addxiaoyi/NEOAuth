@@ -126,7 +126,7 @@ All Brigadier-based. Registered through `RegisterCommandsEvent` in `DirectAuth`.
 
 ## 5. Configuration & Localization
 
-### 5.1 `ModConfig` (`world/serverconfig/DirectAuth-config.json`)
+### 5.1 `ModConfig` (`config/Neoauth/Neoauth.toml`)
 Gson, pretty-printed. Loaded once on `ServerStartedEvent`; missing fields are filled with defaults and the file rewritten.
 
 | Group | Fields (defaults) |
@@ -141,14 +141,14 @@ Gson, pretty-printed. Loaded once on `ServerStartedEvent`; missing fields are fi
 ### 5.2 `LangConfig` (`world/serverconfig/DirectAuth-lang-<code>.json`)
 Not in `assets/<modid>/lang/`. Messages are flat string fields on `LangConfig` (≈70 keys: `msgWelcome`, `errWrongPassword`, `msgAuthReminder`, `msgPremiumSuccess`, etc.). Resolved via `DirectAuth.getConfig().getLang().<field>`. Placeholders use `String.format` (`%d`, `%s`). Color codes use Minecraft `§` sequences.
 
-Both `en` and `es` files are written on startup; the active one is selected by `ModConfig.language`. To add a language, add `LangConfig.load(dir.resolve("DirectAuth-lang-<code>.json"), "<code>")` in `ModConfig#load` and supply translations in `LangConfig` static blocks.
+The single `config/Neoauth/Neoauth.toml` file stores English, Simplified Chinese, and Spanish messages under `[messages.en]`, `[messages.zh]`, and `[messages.es]`; `ModConfig.language` selects the active section.
 
 ### 5.3 Runtime files (all under `<world>/serverconfig/`)
 
 | File | Purpose |
 |---|---|
 | `DirectAuth-config.json` | `ModConfig` |
-| `DirectAuth-lang-en.json`, `DirectAuth-lang-es.json` | `LangConfig` per language |
+| `Neoauth.toml` message sections | `LangConfig` per language |
 | `directauth.db` | SQLite user store |
 | `DirectAuth_positions.json` | `PositionManager` checkpoints |
 | `DirectAuth_users.json.MIGRATED` | Legacy JSON backup (created once) |

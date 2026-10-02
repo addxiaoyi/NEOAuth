@@ -90,9 +90,7 @@ public class DirectAuthCommand {
     }
 
     private static int reloadConfig(CommandContext<CommandSourceStack> context) {
-        Path configPath = context.getSource().getServer()
-                .getWorldPath(LevelResource.ROOT)
-                .resolve("serverconfig").resolve("DirectAuth-config.json");
+        Path configPath = context.getSource().getServer().getFile("config/Neoauth/Neoauth.toml");
         DirectAuth.initConfig(configPath);
 
         // Reaplicar el intervalo de limpieza de sesiones (init() es idempotente: reprograma la tarea)
@@ -105,21 +103,17 @@ public class DirectAuthCommand {
     }
 
     private static int resetLang(CommandContext<CommandSourceStack> context) {
-        Path serverConfig = context.getSource().getServer()
-                .getWorldPath(LevelResource.ROOT)
-                .resolve("serverconfig");
+        Path serverConfig = context.getSource().getServer().getFile("config/Neoauth");
 
         // Deleting the language files forces LangConfig.load() to regenerate them from the
         // mod's built-in defaults (this discards any manual customizations in those files).
         try {
-            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-en.json"));
-            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-zh.json"));
-            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-es.json"));
+            Files.deleteIfExists(serverConfig.resolve("Neoauth.toml"));
         } catch (IOException e) {
             DirectAuth.LOGGER.error("DirectAuth: Failed to delete language files: {}", e.getMessage());
         }
 
-        DirectAuth.initConfig(serverConfig.resolve("DirectAuth-config.json"));
+        DirectAuth.initConfig(serverConfig.resolve("Neoauth.toml"));
 
         context.getSource().sendSuccess(() -> Component.literal(
             DirectAuth.getConfig().getLang().msgLangReset

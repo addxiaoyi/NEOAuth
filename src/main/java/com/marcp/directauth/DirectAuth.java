@@ -67,6 +67,10 @@ public class DirectAuth {
     public static void initConfig(Path configPath) {
         config = ModConfig.load(configPath);
     }
+
+    public static void initConfig(Path configPath, Path legacyConfigPath, Path legacyLanguageDirectory) {
+        config = ModConfig.load(configPath, legacyConfigPath, legacyLanguageDirectory);
+    }
     
     public static DatabaseManager getDatabase() {
         return database;
