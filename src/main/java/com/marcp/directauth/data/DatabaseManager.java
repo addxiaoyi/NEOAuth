@@ -64,6 +64,7 @@ public class DatabaseManager {
                 addColumnIfMissing(stmt, "registrationIp", "TEXT");
                 addColumnIfMissing(stmt, "texturesValue", "TEXT");
                 addColumnIfMissing(stmt, "texturesSignature", "TEXT");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_users_online_uuid ON users(onlineUUID);");
             }
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("CRITICAL: SQLite driver not found. Make sure the library is bundled with the mod.", e);
@@ -160,6 +161,90 @@ public class DatabaseManager {
             e.printStackTrace();
         }
         return false;
+    }
+
+    public CompletableFuture<UserData> upsertPremiumIdentityAsync(
+            String username, String passwordHash, String ip, String onlineUuid,
+            String texturesValue, String texturesSignature) {
+        return CompletableFuture.supplyAsync(() -> upsertPremiumIdentity(
+                username, passwordHash, ip, onlineUuid, texturesValue, texturesSignature), dbExecutor);
+    }
+
+    private UserData upsertPremiumIdentity(String username, String passwordHash, String ip, String onlineUuid,
+                                           String texturesValue, String texturesSignature) {
+        String normalizedName = username.toLowerCase();
+        try {
+            connection.setAutoCommit(false);
+            UserData byUuid = getUserByOnlineUuid(onlineUuid);
+            UserData byName = getUser(normalizedName);
+
+            if (byUuid != null && byName != null
+                    && !byUuid.getUsername().equals(byName.getUsername())) {
+                throw new IllegalStateException("Premium UUID collision for " + onlineUuid);
+            }
+            if (byUuid == null && byName != null && byName.isPremium()
+                    && byName.getOnlineUUID() != null
+                    && !onlineUuid.equalsIgnoreCase(byName.getOnlineUUID())) {
+                throw new IllegalStateException("Username is already bound to another premium UUID: " + username);
+            }
+
+            if (byUuid != null && !byUuid.getUsername().equals(normalizedName)) {
+                try (PreparedStatement rename = connection.prepareStatement(
+                        "UPDATE users SET username = ? WHERE username = ? AND onlineUUID = ?")) {
+                    rename.setString(1, normalizedName);
+                    rename.setString(2, byUuid.getUsername());
+                    rename.setString(3, onlineUuid);
+                    rename.executeUpdate();
+                }
+            }
+
+            UserData current = byUuid != null ? byUuid : byName;
+            if (current == null) {
+                try (PreparedStatement insert = connection.prepareStatement(
+                        "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp, texturesValue, texturesSignature) VALUES(?,?,1,?,?,?,?)")) {
+                    insert.setString(1, normalizedName);
+                    insert.setString(2, passwordHash);
+                    insert.setString(3, onlineUuid);
+                    insert.setString(4, ip);
+                    insert.setString(5, texturesValue);
+                    insert.setString(6, texturesSignature);
+                    insert.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement update = connection.prepareStatement(
+                        "UPDATE users SET isPremium = 1, onlineUUID = ?, texturesValue = COALESCE(?, texturesValue), texturesSignature = COALESCE(?, texturesSignature) WHERE username = ?")) {
+                    update.setString(1, onlineUuid);
+                    update.setString(2, texturesValue);
+                    update.setString(3, texturesSignature);
+                    update.setString(4, normalizedName);
+                    update.executeUpdate();
+                }
+            }
+
+            connection.commit();
+            return getUser(normalizedName);
+        } catch (SQLException exception) {
+            try { connection.rollback(); } catch (SQLException rollbackError) { exception.addSuppressed(rollbackError); }
+            throw new IllegalStateException("Failed to upsert premium identity " + username, exception);
+        } finally {
+            try { connection.setAutoCommit(true); } catch (SQLException exception) { LOGGER.error("Failed to restore SQLite autocommit", exception); }
+        }
+    }
+
+    private UserData getUserByOnlineUuid(String onlineUuid) {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE onlineUUID = ? LIMIT 1")) {
+            statement.setString(1, onlineUuid);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (!rs.next()) return null;
+                UserData data = new UserData(rs.getString("username"), rs.getString("passwordHash"));
+                data.setPremium(rs.getInt("isPremium") == 1);
+                data.setOnlineUUID(rs.getString("onlineUUID"));
+                data.setTextures(rs.getString("texturesValue"), rs.getString("texturesSignature"));
+                return data;
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to find premium identity " + onlineUuid, exception);
+        }
     }
 
     public CompletableFuture<Boolean> createPremiumUserIfAbsentAsync(

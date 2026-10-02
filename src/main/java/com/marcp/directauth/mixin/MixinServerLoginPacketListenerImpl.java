@@ -339,22 +339,8 @@ public abstract class MixinServerLoginPacketListenerImpl {
             String passwordHash = LoginManager.generateUnconfiguredPasswordHash();
             String texturesValue = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesValue();
             String texturesSignature = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesSignature();
-            return DirectAuth.getDatabase().createPremiumUserIfAbsentAsync(username, passwordHash, ip, targetUuid, texturesValue, texturesSignature)
-                    .thenCompose(created -> {
-                        if (created) {
-                            UserData createdUser = new UserData(username, passwordHash);
-                            createdUser.setPremium(true);
-                            createdUser.setOnlineUUID(targetUuid);
-                            return CompletableFuture.completedFuture(createdUser);
-                        }
-                        return DirectAuth.getDatabase().getUserAsync(username).thenCompose(existing -> {
-                            if (existing == null) return CompletableFuture.completedFuture(null);
-                            existing.setPremium(true);
-                            existing.setOnlineUUID(targetUuid);
-                            return DirectAuth.getDatabase().updateUserAsync(username, existing)
-                                    .thenApply(ignored -> existing);
-                        });
-                    });
+            return DirectAuth.getDatabase().upsertPremiumIdentityAsync(
+                    username, passwordHash, ip, targetUuid, texturesValue, texturesSignature);
         }).thenAcceptAsync(account -> {
             if (account == null || !this.connection.isConnected()) {
                 if (this.connection.isConnected()) {
