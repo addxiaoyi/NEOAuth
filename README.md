@@ -84,8 +84,8 @@ Edit `world/serverconfig/NEOauth-config.json` to customize:
   ```
 
   Set it to `false` to reject known premium accounts whenever Mojang session verification fails. With it enabled, a failed premium handshake does **not** switch to an offline UUID: the database UUID remains the player's UUID and `/login <password>` is still required before playing. `premiumAutoLogin` controls automatic Mojang checks and defaults to `true`. `premiumAutoRegister` defaults to `true` and creates a premium account automatically on the first verified login. The player can then run `/setpassword <password>` once to configure password fallback. `premiumVerificationTimeoutSeconds` defaults to `15`; after that time, a known premium account uses password fallback even if Mojang does not return a classified error.
-* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect; default `1800` = 30 minutes) and `sessionCleanupInterval` (minutes between cleanups of expired sessions).
-* **Anti-Bot**: `registrationDelay` (seconds to wait before a fresh player can register) and `maxAccountsPerIP`. Set `maxAccountsPerIP` to `0` to remove the per-IP registration limit.
+* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect; default `600` = 10 minutes) and `sessionCleanupInterval` (minutes between cleanups of expired sessions).
+* **Anti-Bot**: `registrationDelay` (seconds to wait before a fresh player can register) and `maxAccountsPerIP`. `maxAccountsPerIP` defaults to `0`, so registration is not limited by IP unless you set a positive value.
 * **Data Migration**: `migrationMap` — a map of *folder name → migration mode*. To support an extra mod, add its data folder there. Available modes:
     * `RENAME` — rename a single file that is named after the UUID (most vanilla data, SkinRestorer).
     * `DIRECTORY` — move/rename a whole folder named after the UUID (e.g. graves).

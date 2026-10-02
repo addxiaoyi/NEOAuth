@@ -132,10 +132,10 @@ Gson, pretty-printed. Loaded once on `ServerStartedEvent`; missing fields are fi
 | Group | Fields (defaults) |
 |---|---|
 | General | `language` (`"en"`) |
-| Session | `sessionGracePeriod` (1800s / 30 min), `sessionCleanupInterval` (10 min) |
+| Session | `sessionGracePeriod` (600s / 10 min), `sessionCleanupInterval` (10 min) |
 | Password | `minPasswordLength` (4), `maxPasswordLength` (32) |
 | Login flood | `maxLoginAttempts` (5), `loginCooldownMs` (3000), `loginTimeout` (60s), `premiumLoginFallbackOnFailure` (`true`), `premiumAutoLogin` (`true`), `premiumAutoRegister` (`true`), `premiumVerificationTimeoutSeconds` (`15`) |
-| Anti-bot | `registrationDelay` (1s), `maxAccountsPerIP` (5; 0 disables the per-IP limit) |
+| Anti-bot | `registrationDelay` (1s), `maxAccountsPerIP` (0 by default; positive values enable the limit) |
 | Migration | `migrationMap` — directory → `MigrationMode` |
 
 ### 5.2 `LangConfig` (`world/serverconfig/DirectAuth-lang-<code>.json`)

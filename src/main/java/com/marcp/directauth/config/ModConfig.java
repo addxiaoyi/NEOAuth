@@ -11,7 +11,7 @@ import com.google.gson.JsonObject;
 
 public class ModConfig {
     public String language = "en";
-    public int sessionGracePeriod = 1800;
+    public int sessionGracePeriod = 600;
     public int sessionCleanupInterval = 10;
     public int minPasswordLength = 4;
     public int maxPasswordLength = 32;
@@ -23,7 +23,7 @@ public class ModConfig {
     public boolean premiumAutoRegister = true;
     public int premiumVerificationTimeoutSeconds = 15;
     public int registrationDelay = 1;
-    public int maxAccountsPerIP = 5;
+    public int maxAccountsPerIP = 0;
     public Map<String, MigrationMode> migrationMap = new LinkedHashMap<>();
     private transient LangConfig langConfig;
 
