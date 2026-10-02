@@ -1,4 +1,4 @@
-# AGENTS.md — DirectAuth
+# AGENTS.md — NEOauth
 
 Single source of truth for any AI coding agent working in this repo (Claude Code, Gemini, Codex, Cursor, Aider, etc.). Keep this file up to date when architecture changes; do not maintain parallel `CLAUDE.md` / `GEMINI.md` copies.
 
@@ -6,7 +6,7 @@ Single source of truth for any AI coding agent working in this repo (Claude Code
 
 ## 1. Project Overview
 
-**DirectAuth** is a server-side Minecraft authentication mod for **NeoForge 1.21.1** (Java 21). It lets a server run in offline mode safely by forcing players to `/register` and `/login` before they can play, with optional opt-in conversion to premium (online-mode) accounts and automatic player-data migration when that conversion happens.
+**NEOauth** is a server-side Minecraft authentication mod for **NeoForge 1.21.1** (Java 21). It lets a server run in offline mode safely by forcing players to `/register` and `/login` before they can play, with optional opt-in conversion to premium (online-mode) accounts and automatic player-data migration when that conversion happens.
 
 - **Mod ID:** `directauth`
 - **Main class:** `com.marcp.directauth.DirectAuth`
@@ -39,7 +39,7 @@ Mixins are enabled (`directauth.mixins.json`). No access transformers, no coremo
 ## 3. Repo Layout
 
 ```
-DirectAuth/
+NEOauth/
 ├── build.gradle              # moddev plugin, runs, jarJar(sqlite-jdbc)
 ├── gradle.properties         # all versions & mod metadata
 ├── settings.gradle           # plugin management

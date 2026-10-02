@@ -1,8 +1,8 @@
 ![DirectAuth Logo](src/main/resources/logo.png)
 
-# DirectAuth
+# NEOauth
 
-DirectAuth is a **server-side** authentication mod for Minecraft NeoForge 1.21.1. It provides a secure login system for offline-mode servers, with optional auto-login for players who own a legitimate Minecraft account.
+NEOauth is a **server-side** authentication mod for Minecraft NeoForge 1.21.1. It provides a secure login system for offline-mode servers, with optional auto-login for players who own a legitimate Minecraft account.
 
 It is strictly server-side: clients do **not** need to install this mod to join. Players can connect with any vanilla client.
 
@@ -17,7 +17,7 @@ All database operations run asynchronously, so the main server thread never free
 * **Online Auto-Login**: Registered accounts are checked against Mojang during login and, when verified, skip `/online` and `/login` on future sessions.
 * **Automatic Premium Login**: Registered accounts are checked against Mojang during login. A successful premium session logs the player in without `/login` or `/online` and migrates existing offline-UUID data once.
 * **Known Premium Fallback**: If Mojang verification fails or times out for a previously verified account, the player can use their existing `/login` password. The fallback keeps the account's stored premium UUID even with `online-mode=false`; it never substitutes an offline UUID or triggers data migration. Registration stays disabled, and the fallback never auto-authenticates.
-* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again. The default is 30 minutes, and the grace session is not restricted to the previous IP address. DirectAuth stores a short-lived session marker, never a plaintext password.
+* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again. The default is 30 minutes, and the grace session is not restricted to the previous IP address. NEOauth stores a short-lived session marker, never a plaintext password.
 * **Anti-Bot Protection**: Configurable registration delay and a maximum number of accounts per IP address.
 * **Strict Restrictions**: Unauthenticated players cannot move, chat, interact with blocks/entities, drop or pick up items, attack, gain XP, or regenerate health.
 * **Smart Data Migration**: When a player switches from offline to online mode their UUID changes, so the mod automatically migrates their data to the new UUID (see below).
@@ -35,7 +35,7 @@ All database operations run asynchronously, so the main server thread never free
 | **/changepassword** | `/changepassword <oldPassword> <newPassword>` | Changes your password. Requires being logged in. |
 | **/setpassword** | `/setpassword <password>` | Sets the fallback password for a first-time automatically created premium account. |
 | **/unregister** | `/unregister <password>` | Permanently deletes your own account (confirms with your password). |
-| **/online** | `/online <password>` | Legacy manual verification command. **Not required** when `premiumAutoLogin=true`; DirectAuth verifies legitimate accounts automatically during LOGIN. |
+| **/online** | `/online <password>` | Legacy manual verification command. **Not required** when `premiumAutoLogin=true`; NEOauth verifies legitimate accounts automatically during LOGIN. |
 | **/directauth confirm** | `/directauth confirm` | Confirms a pending action when the mod requests it. |
 
 ### Admin commands (require OP level 4)
@@ -50,7 +50,7 @@ All database operations run asynchronously, so the main server thread never free
 
 ## ⚠️ Important: Online Mode Migration
 
-When `premiumAutoLogin=true` (the default), DirectAuth verifies a registered player's Mojang session during the LOGIN protocol. On success, the player's UUID changes from the offline UUID to the real Mojang UUID and DirectAuth migrates their data automatically. The player does not need to run `/online`.
+When `premiumAutoLogin=true` (the default), NEOauth verifies a registered player's Mojang session during the LOGIN protocol. On success, the player's UUID changes from the offline UUID to the real Mojang UUID and NEOauth migrates their data automatically. The player does not need to run `/online`.
 
 **By default** the mod already migrates vanilla data (inventory, ender chest, advancements, statistics) **and** a few common mods (graves/deaths, FTB Quests, SkinRestorer).
 
@@ -66,13 +66,13 @@ If your server uses **other** mods that store per-player data (e.g. Curios, Astr
 
 On first launch the following files are generated:
 
-* Config: `world/serverconfig/DirectAuth-config.json`
-* Language files: `world/serverconfig/DirectAuth-lang-en.json`, `DirectAuth-lang-zh.json` and `DirectAuth-lang-es.json`
+* Config: `world/serverconfig/NEOauth-config.json`
+* Language files: `world/serverconfig/NEOauth-lang-en.json`, `NEOauth-lang-zh.json` and `NEOauth-lang-es.json`
 * Database: `world/serverconfig/directauth.db`
 
 ## Configuration
 
-Edit `world/serverconfig/DirectAuth-config.json` to customize:
+Edit `world/serverconfig/NEOauth-config.json` to customize:
 
 * **Language**: `language` (`"en"`, `"zh"` or `"es"`). Chinese uses Simplified Chinese messages.
 * **Security**: `minPasswordLength`, `maxPasswordLength`, `maxLoginAttempts`, `loginCooldownMs`, `loginTimeout` (seconds before a non-authenticated player is kicked), and `premiumLoginFallbackOnFailure` (allow a known premium account to use its existing password if Mojang verification fails; defaults to `true`). The fallback retains that account's database `onlineUUID`.
@@ -104,7 +104,7 @@ Edit `world/serverconfig/DirectAuth-config.json` to customize:
   }
   ```
 
-Message strings can be edited in the `DirectAuth-lang-*.json` files.
+Message strings can be edited in the `NEOauth-lang-*.json` files.
 
 ## Troubleshooting (FAQ)
 
@@ -117,7 +117,7 @@ A: The server administrator likely hadn't added that mod's data folder to `migra
 ## Technical Details
 
 * **Hashing**: PBKDF2WithHmacSHA256 with a unique salt per user.
-* **Storage**: SQLite at `world/serverconfig/directauth.db` — no external database server. A legacy `DirectAuth_users.json` is migrated automatically on first run if present.
+* **Storage**: SQLite at `world/serverconfig/directauth.db` — no external database server. A legacy `NEOauth_users.json` is migrated automatically on first run if present.
 * **Session Management**: Sessions are validated against the internal database (and Mojang's session servers for online users).
 * **Protection**: The login listener is injected at high priority to prevent unauthorized packet processing.
 
