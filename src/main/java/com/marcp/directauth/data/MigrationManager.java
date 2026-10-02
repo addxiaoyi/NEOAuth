@@ -10,114 +10,90 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MigrationManager {
+    private static final Map<String, Object> MIGRATION_LOCKS = new ConcurrentHashMap<>();
 
-    /**
-     * Migra los datos del jugador basándose en la configuración definida en ModConfig.
-     */
-    public static boolean migratePlayerData(ServerPlayer player, String targetUUIDString) {
-        return migratePlayerData(player.getServer(), player.getStringUUID(), targetUUIDString);
+    public static boolean migratePlayerData(ServerPlayer player, String targetUuid) {
+        return migratePlayerData(player.getServer(), player.getStringUUID(), targetUuid);
     }
 
-    public static boolean migratePlayerData(MinecraftServer server, String oldUUID, String targetUUIDString) {
-        try {
-            if (oldUUID.equals(targetUUIDString)) return true;
+    public static boolean migratePlayerData(MinecraftServer server, String sourceUuid, String targetUuid) {
+        if (sourceUuid.equalsIgnoreCase(targetUuid)) return true;
 
-            // Preparamos las variantes sin guiones (necesario para FTB Quests interno)
-            String oldUUIDNoDash = oldUUID.replace("-", "");
-            String newUUIDNoDash = targetUUIDString.replace("-", "");
+        String lockKey = targetUuid.toLowerCase();
+        Object lock = MIGRATION_LOCKS.computeIfAbsent(lockKey, ignored -> new Object());
+        synchronized (lock) {
+            try {
+                migrateLocked(server, sourceUuid, targetUuid);
+                return true;
+            } catch (Exception exception) {
+                DirectAuth.LOGGER.error("NEOauth migration failed {} -> {}", sourceUuid, targetUuid, exception);
+                return false;
+            } finally {
+                MIGRATION_LOCKS.remove(lockKey, lock);
+            }
+        }
+    }
 
-            File worldDir = server.getWorldPath(LevelResource.ROOT).toFile();
-            Map<String, MigrationMode> migrationMap = DirectAuth.getConfig().migrationMap;
+    private static void migrateLocked(MinecraftServer server, String sourceUuid, String targetUuid) throws IOException {
+        String sourceCompact = sourceUuid.replace("-", "");
+        String targetCompact = targetUuid.replace("-", "");
+        File worldDir = server.getWorldPath(LevelResource.ROOT).toFile();
+        Map<String, MigrationMode> migrationMap = DirectAuth.getConfig().migrationMap;
 
-            for (Map.Entry<String, MigrationMode> entry : migrationMap.entrySet()) {
-                String folderName = entry.getKey();
-                MigrationMode mode = entry.getValue();
+        for (Map.Entry<String, MigrationMode> entry : migrationMap.entrySet()) {
+            File folder = new File(worldDir, entry.getKey());
+            if (!folder.isDirectory()) continue;
 
-                File folder = new File(worldDir, folderName);
-                
-                // Si la carpeta del mod no existe, la ignoramos silenciosamente
-                if (!folder.exists() || !folder.isDirectory()) continue;
+            if (entry.getValue() == MigrationMode.DIRECTORY) {
+                migrateDirectory(folder, sourceUuid, targetUuid);
+                continue;
+            }
 
-                // --- ESTRATEGIA 1: DIRECTORIOS (ej. deaths/UUID/) ---
-                if (mode == MigrationMode.DIRECTORY) {
-                    File sourceDir = new File(folder, oldUUID);
-                    // Solo si existe la carpeta con la UUID vieja
-                    if (sourceDir.exists() && sourceDir.isDirectory()) {
-                        File targetDir = new File(folder, targetUUIDString);
-                        
-                        // Si ya existe destino (raro), backup
-                        if (targetDir.exists()) {
-                            File backup = new File(folder, targetUUIDString + "_bak_" + System.currentTimeMillis());
-                            targetDir.renameTo(backup);
-                        }
-                        
-                        boolean success = sourceDir.renameTo(targetDir);
-                        if (success) {
-                            DirectAuth.LOGGER.info("DirectAuth Migration: Folder moved {} -> {}", sourceDir.getName(), targetDir.getName());
-                        } else {
-                            DirectAuth.LOGGER.error("DirectAuth Migration: Failed to move folder {}", sourceDir.getPath());
-                        }
-                    }
-                    continue; // Pasamos a la siguiente entrada de config
-                }
-
-                // --- ESTRATEGIA 2 & 3: ARCHIVOS (RENAME o TEXT_REPLACE) ---
-                // Buscamos archivos que EMPIECEN por la UUID vieja (ej. UUID.dat, UUID.snbt, UUID.json)
-                File[] filesToMigrate = folder.listFiles((dir, name) -> name.startsWith(oldUUID));
-
-                if (filesToMigrate != null) {
-                    for (File sourceFile : filesToMigrate) {
-                        // Generar nuevo nombre conservando la extensión (ej. .snbt)
-                        String newFileName = sourceFile.getName().replace(oldUUID, targetUUIDString);
-                        File targetFile = new File(folder, newFileName);
-
-                        // 1. Mover/Renombrar
-                        moveOrMerge(sourceFile, targetFile);
-
-                        // 2. Si es TEXT_REPLACE, abrimos el archivo nuevo y sustituimos contenidos
-                        if (mode == MigrationMode.TEXT_REPLACE) {
-                            processTextReplacement(targetFile, oldUUID, targetUUIDString, oldUUIDNoDash, newUUIDNoDash);
-                        }
-                    }
+            File[] sourceFiles = folder.listFiles((dir, name) -> name.startsWith(sourceUuid));
+            if (sourceFiles == null) continue;
+            for (File sourceFile : sourceFiles) {
+                File targetFile = new File(folder, sourceFile.getName().replace(sourceUuid, targetUuid));
+                moveOrBackup(sourceFile, targetFile);
+                if (entry.getValue() == MigrationMode.TEXT_REPLACE) {
+                    replaceUuidText(targetFile, sourceUuid, targetUuid, sourceCompact, targetCompact);
                 }
             }
-            return true;
-
-        } catch (Exception e) {
-            DirectAuth.LOGGER.error("CRITICAL ERROR during migration {} -> {}", oldUUID, targetUUIDString, e);
-            return false;
         }
     }
 
-    private static void moveOrMerge(File source, File target) throws IOException {
-        if (target.exists()) {
-            // Backup simple si ya existía el archivo destino
-            File backup = new File(target.getParent(), target.getName() + ".bak");
-            Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    private static void migrateDirectory(File folder, String sourceUuid, String targetUuid) throws IOException {
+        File source = new File(folder, sourceUuid);
+        if (!source.isDirectory()) return;
+
+        File target = new File(folder, targetUuid);
+        if (target.exists()) backup(target);
+        if (!source.renameTo(target)) {
+            throw new IOException("Failed to move directory " + source);
         }
+        DirectAuth.LOGGER.info("NEOauth migration directory {} -> {}", source.getName(), target.getName());
+    }
+
+    private static void moveOrBackup(File source, File target) throws IOException {
+        if (target.exists()) backup(target);
         Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        DirectAuth.LOGGER.info("DirectAuth Migration: File migrated {}", target.getName());
+        DirectAuth.LOGGER.info("NEOauth migration file {}", target.getName());
     }
 
-    private static void processTextReplacement(File file, String oldDash, String newDash, String oldNoDash, String newNoDash) {
-        try {
-            String content = Files.readString(file.toPath());
-            String originalContent = content;
+    private static void backup(File target) throws IOException {
+        File backup = new File(target.getParentFile(), target.getName() + ".bak_" + System.currentTimeMillis());
+        Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
 
-            // Reemplazo 1: UUID con guiones (Estándar)
-            content = content.replace(oldDash, newDash);
-            
-            // Reemplazo 2: UUID sin guiones (Formato interno FTB Quests / Hex)
-            content = content.replace(oldNoDash, newNoDash);
-
-            if (!content.equals(originalContent)) {
-                Files.writeString(file.toPath(), content);
-                DirectAuth.LOGGER.info("DirectAuth Migration: Content updated (internal IDs) in {}", file.getName());
-            }
-        } catch (IOException e) {
-            DirectAuth.LOGGER.error("DirectAuth Migration: Error reading/writing text file {}", file.getName(), e);
+    private static void replaceUuidText(File file, String sourceUuid, String targetUuid,
+                                        String sourceCompact, String targetCompact) throws IOException {
+        String original = Files.readString(file.toPath());
+        String replaced = original.replace(sourceUuid, targetUuid).replace(sourceCompact, targetCompact);
+        if (!original.equals(replaced)) {
+            Files.writeString(file.toPath(), replaced);
+            DirectAuth.LOGGER.info("NEOauth migration text updated {}", file.getName());
         }
     }
 }

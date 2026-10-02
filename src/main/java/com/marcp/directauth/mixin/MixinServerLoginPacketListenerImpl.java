@@ -348,7 +348,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
                             return CompletableFuture.completedFuture(createdUser);
                         }
                         return DirectAuth.getDatabase().getUserAsync(username).thenCompose(existing -> {
-                            if (existing == null) return null;
+                            if (existing == null) return CompletableFuture.completedFuture(null);
                             existing.setPremium(true);
                             existing.setOnlineUUID(targetUuid);
                             return DirectAuth.getDatabase().updateUserAsync(username, existing)
