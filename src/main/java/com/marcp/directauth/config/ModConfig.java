@@ -10,7 +10,7 @@ import java.util.Map;
 import com.google.gson.JsonObject;
 
 public class ModConfig {
-    public String language = "en";
+    public String language = "zh";
     public int sessionGracePeriod = 600;
     public int sessionCleanupInterval = 10;
     public int minPasswordLength = 4;

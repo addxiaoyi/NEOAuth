@@ -5,6 +5,7 @@ import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.yggdrasil.ProfileResult;
 import java.net.InetSocketAddress;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -231,6 +232,23 @@ public abstract class MixinServerLoginPacketListenerImpl {
         if (this.directAuth$premiumFallbackStarted && !this.directAuth$isStartingPremiumFallback) {
             ci.cancel();
             return;
+        }
+
+        if (!this.directAuth$isStartingVerifiedProfile
+                && profile.getId() != null
+                && profile.getProperties().isEmpty()) {
+            try {
+                ProfileResult refreshed = this.server.getSessionService().fetchProfile(profile.getId(), true);
+                if (refreshed != null && !refreshed.profile().getProperties().isEmpty()) {
+                    ci.cancel();
+                    this.directAuth$isStartingVerifiedProfile = true;
+                    this.directAuth$startClientVerification(refreshed.profile());
+                    this.directAuth$isStartingVerifiedProfile = false;
+                    return;
+                }
+            } catch (RuntimeException exception) {
+                DirectAuth.LOGGER.warn("Could not refresh Mojang skin properties for {}", profile.getName(), exception);
+            }
         }
 
         if (this.directAuth$premiumUuid != null

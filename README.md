@@ -67,14 +67,14 @@ If your server uses **other** mods that store per-player data (e.g. Curios, Astr
 On first launch the following files are generated:
 
 * Config: `world/serverconfig/NEOauth-config.json`
-* Language files: `world/serverconfig/NEOauth-lang-en.json`, `NEOauth-lang-zh.json` and `NEOauth-lang-es.json`
+* Unified config: `config/Neoauth/Neoauth.toml` (contains all settings and English/Chinese/Spanish messages)
 * Database: `world/serverconfig/directauth.db`
 
 ## Configuration
 
 Edit `world/serverconfig/NEOauth-config.json` to customize:
 
-* **Language**: `language` (`"en"`, `"zh"` or `"es"`). Chinese uses Simplified Chinese messages.
+* **Language**: `language` (`"en"`, `"zh"` or `"es"`). The default is `"zh"` (Simplified Chinese), stored in `config/Neoauth/Neoauth.toml`.
 * **Security**: `minPasswordLength`, `maxPasswordLength`, `maxLoginAttempts`, `loginCooldownMs`, `loginTimeout` (seconds before a non-authenticated player is kicked), and `premiumLoginFallbackOnFailure` (allow a known premium account to use its existing password if Mojang verification fails; defaults to `true`). The fallback retains that account's database `onlineUUID`.
 
   ```json
