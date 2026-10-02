@@ -14,8 +14,8 @@ public class ModConfig {
     public String language = "en";
 
     // --- Session Settings ---
-    // Tiempo en segundos para mantener la sesión tras desconexión (Default: 600s = 10 min)
-    public int sessionGracePeriod = 600;
+    // Tiempo en segundos para mantener la sesión tras desconexión (Default: 1800s = 30 min)
+    public int sessionGracePeriod = 1800;
     
     // Intervalo en minutos para limpiar sesiones caducadas de la memoria (Default: 10 min)
     public int sessionCleanupInterval = 10;
@@ -26,10 +26,19 @@ public class ModConfig {
     public int maxLoginAttempts = 5;
     public long loginCooldownMs = 3000;
     public int loginTimeout = 60; // Time in seconds before kick
+
+    // Known premium accounts may still use their stored password if Mojang
+    // cannot verify the encrypted login handshake.
+    public boolean premiumLoginFallbackOnFailure = true;
+    public boolean premiumAutoLogin = true;
+    public boolean premiumAutoRegister = true;
+    // Seconds to wait for Mojang before known premium accounts use password login.
+    public int premiumVerificationTimeoutSeconds = 15;
     
     // Anti-Bot Settings
     public int registrationDelay = 1; // 1 second wait before registering
-    public int maxAccountsPerIP = 5;  // Max 5 accounts per IP
+    // Maximum accounts registered from one IP. Set to 0 or a negative value to disable the limit.
+    public int maxAccountsPerIP = 5;
 
     // --- Data Migration Settings ---
     // Mapa: Ruta de la carpeta -> Modo de migración
@@ -89,6 +98,7 @@ public class ModConfig {
         // Load language (sin cambios)
         Path dir = configPath.getParent();
         LangConfig.load(dir.resolve("DirectAuth-lang-en.json"), "en");
+        LangConfig.load(dir.resolve("DirectAuth-lang-zh.json"), "zh");
         LangConfig.load(dir.resolve("DirectAuth-lang-es.json"), "es");
         String langFileName = "DirectAuth-lang-" + config.language + ".json";
         Path langPath = dir.resolve(langFileName);

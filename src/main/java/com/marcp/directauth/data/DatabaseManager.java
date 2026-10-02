@@ -84,6 +84,10 @@ public class DatabaseManager {
         }
     }
 
+    public CompletableFuture<Integer> countAccountsByIPAsync(String ip) {
+        return CompletableFuture.supplyAsync(() -> countAccountsByIP(ip), dbExecutor);
+    }
+
     public int countAccountsByIP(String ip) {
         if (ip == null) return 0;
         String sql = "SELECT COUNT(*) FROM users WHERE registrationIp = ?";
@@ -107,24 +111,15 @@ public class DatabaseManager {
         }, dbExecutor);
     }
 
-    public void updateUserAsync(String username, UserData data) {
-        dbExecutor.submit(() -> {
-            try {
-                updateUser(username, data);
-            } catch (Exception e) {
-                LOGGER.error("Error updating user {}: {}", username, e.getMessage());
-            }
-        });
+    public CompletableFuture<Boolean> updateUserAsync(String username, UserData data) {
+        return CompletableFuture.supplyAsync(() -> {
+            updateUser(username, data);
+            return true;
+        }, dbExecutor);
     }
 
-    public void createUserAsync(String username, String passwordHash, String ip) {
-        dbExecutor.submit(() -> {
-            try {
-                createUser(username, passwordHash, ip);
-            } catch (Exception e) {
-                LOGGER.error("Error creating user {}: {}", username, e.getMessage());
-            }
-        });
+    public CompletableFuture<Boolean> createUserIfAbsentAsync(String username, String passwordHash, String ip) {
+        return CompletableFuture.supplyAsync(() -> createUserIfAbsent(username, passwordHash, ip), dbExecutor);
     }
 
     public UserData getUser(String username) {
@@ -158,6 +153,39 @@ public class DatabaseManager {
         return false;
     }
 
+    public CompletableFuture<Boolean> createPremiumUserIfAbsentAsync(
+            String username, String passwordHash, String ip, String onlineUuid) {
+        return CompletableFuture.supplyAsync(
+                () -> createPremiumUserIfAbsent(username, passwordHash, ip, onlineUuid), dbExecutor);
+    }
+
+    private boolean createPremiumUserIfAbsent(String username, String passwordHash, String ip, String onlineUuid) {
+        String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) "
+                + "VALUES(?,?,1,?,?) ON CONFLICT(username) DO NOTHING";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, username.toLowerCase());
+            pstmt.setString(2, passwordHash);
+            pstmt.setString(3, onlineUuid);
+            pstmt.setString(4, ip);
+            return pstmt.executeUpdate() == 1;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to create premium account " + username, e);
+        }
+    }
+
+    private boolean createUserIfAbsent(String username, String passwordHash, String ip) {
+        String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) "
+                + "VALUES(?,?,0,NULL,?) ON CONFLICT(username) DO NOTHING";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, username.toLowerCase());
+            pstmt.setString(2, passwordHash);
+            pstmt.setString(3, ip);
+            return pstmt.executeUpdate() == 1;
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to create account " + username, e);
+        }
+    }
+
     public void createUser(String username, String passwordHash, String ip) {
         String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) VALUES(?,?,0,NULL,?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -183,14 +211,22 @@ public class DatabaseManager {
         }
     }
 
-    public void deleteUser(String username) {
+    public CompletableFuture<Boolean> deleteUserAsync(String username) {
+        return CompletableFuture.supplyAsync(() -> deleteUserReliable(username), dbExecutor);
+    }
+
+    private boolean deleteUserReliable(String username) {
         String sql = "DELETE FROM users WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());
-            pstmt.executeUpdate();
+            return pstmt.executeUpdate() > 0;
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new IllegalStateException("Failed to delete account " + username, e);
         }
+    }
+
+    public void deleteUser(String username) {
+        deleteUserReliable(username);
     }
 
     // --- MIGRACIÓN (Solo se ejecuta una vez) ---

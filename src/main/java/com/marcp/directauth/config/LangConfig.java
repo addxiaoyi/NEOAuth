@@ -21,9 +21,10 @@ public class LangConfig {
     public String errPasswordTooShort = "§cPassword must be at least 4 characters long.";
     public String errPasswordTooLong = "§cPassword cannot be longer than 32 characters.";
     public String msgRegistered = "§a✓ Account registered successfully.";
-    public String msgPremiumEnableHint = "§7Do you have a paid Minecraft account? Use §b/online§7 to enable auto-login.";
+    public String msgPremiumEnableHint = "§7If you are using a legitimate Minecraft account, DirectAuth will verify it automatically on your next login.";
     public String errRegistrationCooldown = "§cPlease wait a moment before registering.";
     public String errIpLimitReached = "§cRegistration limit reached for this IP address.";
+    public String errStorageUnavailable = "§cAuthentication storage is temporarily unavailable. Please try again.";
     
     // --- Login Messages ---
     public String errNotRegistered = "§cYou do not have an account. Use §e/register <password>";
@@ -37,8 +38,12 @@ public class LangConfig {
     public String msgTimeout = "§cLogin timed out.\n§7Please authenticate faster next time.";
     
     // --- Online Mode (formerly Premium) Messages ---
-    public String msgPremiumHint = "§7Own a legitimate account? Use §b/online§7 after logging in.";
+    public String msgPremiumHint = "§7Legitimate accounts are detected automatically; no extra command is required.";
     public String msgAutoLogin = "§a✓ Automatically authenticated (Online Mode).";
+    public String msgAutoPasswordSetup = "§eYour premium account was created automatically. Set a fallback password with §a/setpassword <password>§e if Mojang is unavailable later.";
+    public String msgPremiumAccountCreated = "§a✓ Premium account created automatically. You were logged in without a password.";
+    public String errPasswordSetupNotRequired = "§eYour account already has a password. Use §a/changepassword§e to change it.";
+    public String msgPremiumFallbackLogin = "§eMojang could not verify this login. Use §a/login <password>§e to continue; registration is disabled for this account.";
     public String msgPremiumError = "§cAuthentication Error\n§7This account is registered in Online Mode,\n§7but your UUID does not match.\n§7If you own this account, contact an administrator.";
     public String errNotAuthenticated = "§cYou must authenticate first.";
     public String errUserNotFound = "§cError: Account not found.";
@@ -61,7 +66,7 @@ public class LangConfig {
     public String errAdminUsageReset = "§cUsage: /directauth resetpass <user> <newPassword>";
     public String errAdminUsageUnregister = "§cUsage: /directauth unregister <user>";
     public String msgConfigReloaded = "§a✓ DirectAuth configuration reloaded.";
-    public String msgLangReset = "§a✓ DirectAuth built-in (English/Spanish) language files reset to defaults.";
+    public String msgLangReset = "§a✓ DirectAuth built-in (English/Chinese/Spanish) language files reset to defaults.";
 
     // --- Restriction Messages ---
     public String msgNoDrop = "§cYou cannot drop items before authenticating.";
@@ -135,6 +140,12 @@ public class LangConfig {
     }
 
     public void setDefaults(String language) {
+        if ("zh".equalsIgnoreCase(language) || "zh_cn".equalsIgnoreCase(language)
+                || "zh-cn".equalsIgnoreCase(language)) {
+            applyChineseDefaults();
+            return;
+        }
+
         if ("es".equalsIgnoreCase(language)) {
             // --- General Messages ---
             msgWelcome = "§e¡Bienvenido! Usa §a/register <contraseña>§e para crear tu cuenta.";
@@ -147,9 +158,10 @@ public class LangConfig {
             errPasswordTooShort = "§cLa contraseña debe tener al menos 4 caracteres.";
             errPasswordTooLong = "§cLa contraseña no puede tener más de 32 caracteres.";
             msgRegistered = "§a✓ Cuenta registrada exitosamente.";
-            msgPremiumEnableHint = "§7¿Tienes una cuenta de Minecraft premium? Usa §b/online§7 para activar el auto-login.";
+            msgPremiumEnableHint = "§7Si usas una cuenta original de Minecraft, DirectAuth la verificará automáticamente en tu próximo acceso.";
             errRegistrationCooldown = "§cPor favor, espera un momento antes de registrarte.";
             errIpLimitReached = "§cSe ha alcanzado el límite de registros para esta dirección IP.";
+            errStorageUnavailable = "§cEl almacenamiento de autenticación no está disponible temporalmente. Inténtalo de nuevo.";
 
             // --- Login Messages ---
             errNotRegistered = "§cNo tienes una cuenta. Usa §e/register <contraseña>";
@@ -162,8 +174,12 @@ public class LangConfig {
             msgTimeout = "§cTiempo de espera agotado.\n§7Por favor autentícate más rápido la próxima vez.";
 
             // --- Online Mode (formerly Premium) Messages ---
-            msgPremiumHint = "§7¿Cuenta original? Usa §b/online§7 después de entrar.";
+            msgPremiumHint = "§7Las cuentas originales se detectan automáticamente; no necesitas ejecutar ningún comando.";
             msgAutoLogin = "§a✓ Autenticado automáticamente (Modo Online).";
+            msgAutoPasswordSetup = "§eTu cuenta original se creó automáticamente. Usa §a/setpassword <contraseña>§e para configurar una contraseña de respaldo si Mojang no está disponible.";
+            msgPremiumAccountCreated = "§a✓ Cuenta original creada automáticamente. Has entrado sin contraseña.";
+            errPasswordSetupNotRequired = "§eTu cuenta ya tiene una contraseña. Usa §a/changepassword§e para cambiarla.";
+            msgPremiumFallbackLogin = "§eMojang no pudo verificar este acceso. Usa §a/login <contraseña>§e para continuar; el registro está deshabilitado para esta cuenta.";
             msgPremiumError = "§cError de Autenticación\n§7Esta cuenta está en Modo Online,\n§7pero tu UUID no coincide.\n§7Si eres el dueño, contacta a un administrador.";
             errNotAuthenticated = "§cDebes autenticarte primero.";
             errUserNotFound = "§cError: Cuenta no encontrada.";
@@ -186,7 +202,7 @@ public class LangConfig {
             errAdminUsageReset = "§cUso: /directauth resetpass <usuario> <nueva_contraseña>";
             errAdminUsageUnregister = "§cUso: /directauth unregister <usuario>";
             msgConfigReloaded = "§a✓ Configuración de DirectAuth recargada.";
-            msgLangReset = "§a✓ Archivos de idioma integrados de DirectAuth (Inglés/Español) restablecidos a los valores por defecto.";
+            msgLangReset = "§a✓ Archivos de idioma integrados de DirectAuth (Inglés/Chino/Español) restablecidos a los valores por defecto.";
 
             // --- Restriction Messages ---
             msgNoDrop = "§cNo puedes soltar objetos antes de autenticarte.";
@@ -206,6 +222,76 @@ public class LangConfig {
             msgSessionRestored = "§aBienvenido de nuevo. Sesión restaurada automáticamente.";
             msgLogoutSuccess = "§cHas cerrado sesión correctamente.";
         }
+    }
+
+    private void applyChineseDefaults() {
+        msgWelcome = "§e欢迎！请输入 §a/register <密码>§e 注册账号。";
+        msgLoginRequest = "§e请输入 §a/login <密码>§e 登录。";
+        msgAuthReminder = "§c你必须先验证身份：/register <密码> 或 /login <密码>";
+        errNotPlayer = "只有玩家可以使用此命令。";
+
+        errAlreadyRegistered = "§c你已经注册过账号，请使用 §e/login <密码>§c。";
+        errPasswordTooShort = "§c密码长度至少为 4 个字符。";
+        errPasswordTooLong = "§c密码长度不能超过 32 个字符。";
+        msgRegistered = "§a✓ 账号注册成功。";
+        msgPremiumEnableHint = "§7如果你使用正版 Minecraft，DirectAuth 会在下次登录时自动验证。";
+        errRegistrationCooldown = "§c请稍等片刻后再注册。";
+        errIpLimitReached = "§c此 IP 的注册账号数量已达到上限。";
+        errStorageUnavailable = "§c认证存储暂时不可用，请稍后再试。";
+
+        errNotRegistered = "§c你还没有注册账号，请使用 §e/register <密码>§c。";
+        errAlreadyAuthenticated = "§e你已经完成验证。";
+        errCooldown = "§c请等待几秒后再试。";
+        errMaxAttempts = "§c失败次数过多。";
+        msgAuthenticated = "§a✓ 登录成功。";
+        errWrongPassword = "§c密码错误（%d/%d 次）。";
+        errWrongPasswordSimple = "§c密码错误。";
+        msgTimeout = "§c登录超时。\n§7请下次更快完成身份验证。";
+
+        msgPremiumHint = "§7正版账号会自动识别，不需要执行额外命令。";
+        msgAutoLogin = "§a✓ 已自动完成正版验证。";
+        msgAutoPasswordSetup = "§e正版账号已自动创建。建议使用 §a/setpassword <密码>§e 设置备用密码，以便 Mojang 不可用时登录。";
+        msgPremiumAccountCreated = "§a✓ 已自动创建正版账号，并免密登录。";
+        errPasswordSetupNotRequired = "§e你的账号已经设置密码，请使用 §a/changepassword§e 修改。";
+        msgPremiumFallbackLogin = "§eMojang 暂时无法验证本次登录，请使用 §a/login <密码>§e 继续；该账号不允许重新注册。";
+        msgPremiumError = "§c正版验证失败\n§7此账号已绑定正版 UUID，\n§7但本次连接的 UUID 不匹配。\n§7如果这是你的账号，请联系管理员。";
+        errNotAuthenticated = "§c请先完成身份验证。";
+        errUserNotFound = "§c错误：账号不存在。";
+        msgAlreadyPremium = "§e你的账号已经绑定正版模式。";
+        msgVerifying = "§e正在向 Mojang 验证账号……";
+        errMojangNotFound = "§c没有找到与此用户名对应的正版 Minecraft 账号。";
+        msgMojangHint = "§7请确认你使用的是正版 Minecraft 账号。";
+        errUUIDMismatch = "§c你的 UUID 与 Mojang 账号不匹配。";
+        msgSessionHint = "§7当前使用的是离线会话。";
+        msgPremiumSuccess = "§a✓ 正版账号验证成功。";
+        msgPremiumKick = "§a正版账号验证成功！\n§e请重新进入服务器以应用 UUID 变更。";
+        msgAutoLoginHint = "§7此账号已启用自动登录。";
+        msgOnlineModeWarning = "§6警告！§e启用正版模式会迁移玩家数据（例如背包、统计和进度）。如果服务器使用了其他模组，请先确认迁移配置正确并做好备份。";
+
+        msgPremiumWarning = "§c警告！§7此命令为兼容旧流程保留。当前版本会在登录阶段自动验证正版账号。";
+        msgAdminPremiumUpdated = "§a已将 %s 的正版模式状态更新为：%s";
+        errAdminUserNotFound = "§c数据库中不存在用户 %s。";
+        errAdminUsage = "§c用法：/directauth online <用户> <true|false>";
+        errAdminUsageReset = "§c用法：/directauth resetpass <用户> <新密码>";
+        errAdminUsageUnregister = "§c用法：/directauth unregister <用户>";
+        msgConfigReloaded = "§a✓ DirectAuth 配置已重新加载。";
+        msgLangReset = "§a✓ 内置中英文和西班牙语语言文件已恢复默认值。";
+
+        msgNoDrop = "§c完成身份验证前不能丢弃物品。";
+        msgUseCommands = "§c请先使用认证命令。";
+
+        msgConfirmRequest = "§e⚠️ 需要确认！\n§7你即将执行敏感操作。\n§7请输入 §6/directauth confirm§7 确认。";
+        msgPasswordChanged = "§a✓ 密码修改成功。";
+        msgAccountDeleted = "§c你的账号已删除。";
+        errOldPasswordWrong = "§c旧密码错误。";
+        errNoPendingAction = "§c没有等待确认的操作。";
+        msgActionExpired = "§c确认请求已过期。";
+
+        msgSessionRestored = "§a欢迎回来，会话已自动恢复。";
+        msgLogoutSuccess = "§c已成功退出登录。";
+
+        msgAdminResetSuccess = "§a用户 %s 的密码已重置。";
+        msgAdminUnregisterSuccess = "§a用户 %s 已从数据库删除。";
     }
 
     public void save(Path langPath) {

@@ -4,6 +4,7 @@ import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.commands.LoginCommand;
 import com.marcp.directauth.commands.PremiumCommand;
 import com.marcp.directauth.commands.RegisterCommand;
+import com.marcp.directauth.commands.SetPasswordCommand;
 import com.marcp.directauth.commands.ChangePasswordCommand;
 import com.marcp.directauth.commands.DirectAuthCommand;
 import com.marcp.directauth.commands.UnregisterCommand;
@@ -47,6 +48,7 @@ public class DirectAuth {
     
     private void onRegisterCommands(RegisterCommandsEvent event) {
         RegisterCommand.register(event.getDispatcher());
+        SetPasswordCommand.register(event.getDispatcher());
         LoginCommand.register(event.getDispatcher());
         PremiumCommand.register(event.getDispatcher());
         

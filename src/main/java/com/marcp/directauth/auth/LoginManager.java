@@ -3,10 +3,12 @@ package com.marcp.directauth.auth;
 import net.minecraft.server.level.ServerPlayer;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -26,6 +28,11 @@ public class LoginManager {
 
     // Mapa para guardar el momento exacto de la conexión
     private final Map<UUID, Long> connectionTimes = new ConcurrentHashMap<>();
+
+    private static final long PREMIUM_FALLBACK_MARKER_TTL_MS = TimeUnit.MINUTES.toMillis(2);
+    private static final long AUTOMATIC_LOGIN_MARKER_TTL_MS = TimeUnit.MINUTES.toMillis(2);
+    private final Map<UUID, Long> premiumPasswordFallbacks = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> automaticPremiumLogins = new ConcurrentHashMap<>();
 
     public long getConnectionTime(ServerPlayer player) {
         return connectionTimes.getOrDefault(player.getUUID(), System.currentTimeMillis());
@@ -65,6 +72,7 @@ public class LoginManager {
 
     // Configuración de PBKDF2
     private static final int ITERATIONS = 100000;
+    private static final String AUTO_PASSWORD_PREFIX = "AUTO_GENERATED:";
     private static final int KEY_LENGTH = 256;
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -82,6 +90,8 @@ public class LoginManager {
             // Si el tiempo actual es mayor al de expiración, borramos
             return now > expirationTime;
         });
+        premiumPasswordFallbacks.entrySet().removeIf(entry -> now > entry.getValue());
+        automaticPremiumLogins.entrySet().removeIf(entry -> now > entry.getValue());
         
         // Opcional: Log de depuración si quieres ver cuándo ocurre (quita esto en producción para evitar spam)
         // com.marcp.directauth.DirectAuth.LOGGER.debug("Limpieza de sesiones completada.");
@@ -104,6 +114,29 @@ public class LoginManager {
     public boolean isAuthenticated(ServerPlayer player) {
         return authenticatedPlayers.contains(player.getUUID());
     }
+
+    public void markPremiumPasswordFallback(UUID premiumUuid) {
+        premiumPasswordFallbacks.put(premiumUuid, System.currentTimeMillis() + PREMIUM_FALLBACK_MARKER_TTL_MS);
+    }
+
+    public void clearPremiumPasswordFallback(UUID premiumUuid) {
+        premiumPasswordFallbacks.remove(premiumUuid);
+    }
+
+    public boolean consumePremiumPasswordFallback(UUID premiumUuid) {
+        Long expiresAt = premiumPasswordFallbacks.remove(premiumUuid);
+        return expiresAt != null && expiresAt >= System.currentTimeMillis();
+    }
+
+
+    public void markAutomaticPremiumLogin(UUID premiumUuid) {
+        automaticPremiumLogins.put(premiumUuid, System.currentTimeMillis() + AUTOMATIC_LOGIN_MARKER_TTL_MS);
+    }
+
+    public boolean consumeAutomaticPremiumLogin(UUID premiumUuid) {
+        Long expiresAt = automaticPremiumLogins.remove(premiumUuid);
+        return expiresAt != null && expiresAt >= System.currentTimeMillis();
+    }
     
     public void setAuthenticated(ServerPlayer player, boolean authenticated) {
         if (authenticated) {
@@ -120,6 +153,8 @@ public class LoginManager {
         loginAttempts.remove(player.getUUID());
         failedAttempts.remove(player.getUUID());
         connectionTimes.remove(player.getUUID());
+        premiumPasswordFallbacks.remove(player.getUUID());
+        automaticPremiumLogins.remove(player.getUUID());
         preLoginCache.remove(player.getGameProfile().getName().toLowerCase()); // Limpiar también la caché al desconectar
     }
 
@@ -136,15 +171,13 @@ public class LoginManager {
         if (durationSeconds <= 0) return; // Si está desactivado (0), no guardamos nada
 
         long expiryTime = System.currentTimeMillis() + (durationSeconds * 1000);
-        String ip = player.getIpAddress(); // NeoForge suele dar la IP sin puerto aquí
-
-        // 3. Guardamos en el "Limbo"
-        graceSessions.put(player.getUUID(), new GraceSession(ip, expiryTime));
+        // 3. Guardamos en el "Limbo" sin vincular la sesión a la IP.
+        graceSessions.put(player.getUUID(), new GraceSession(expiryTime));
     }
 
     /**
      * Se llama cuando el jugador entra.
-     * Intenta recuperar la sesión si la IP coincide y hay tiempo.
+     * Intenta recuperar la sesión mientras no haya expirado.
      */
     public boolean tryRestoreSession(ServerPlayer player) {
         UUID uuid = player.getUUID();
@@ -161,15 +194,7 @@ public class LoginManager {
             return false; // Caducó
         }
 
-        // 2. Chequeo de IP (CRÍTICO DE SEGURIDAD)
-        String currentIp = player.getIpAddress();
-        if (!session.ipAddress.equals(currentIp)) {
-            // Log de advertencia opcional para admins
-            com.marcp.directauth.DirectAuth.LOGGER.warn("DirectAuth: Invalid session attempt (different IP) for {}", player.getName().getString());
-            return false; 
-        }
-
-        // 3. Restaurar
+        // 2. Restaurar sin exigir la misma IP.
         setAuthenticated(player, true);
         return true;
     }
@@ -179,7 +204,7 @@ public class LoginManager {
     }
 
     // Clase interna simple para guardar los datos
-    private record GraceSession(String ipAddress, long expirationTime) {}
+    private record GraceSession(long expirationTime) {}
 
     public void recordJoin(ServerPlayer player) {
         connectionTimes.put(player.getUUID(), System.currentTimeMillis());
@@ -247,9 +272,23 @@ public class LoginManager {
         if (username == null) return false;
         return preLoginCache.containsKey(username.toLowerCase());
     }
+
+    public void clearPreLoadedData(String username) {
+        if (username != null) {
+            preLoginCache.remove(username.toLowerCase());
+        }
+    }
     
     // --- Hashing con PBKDF2 (Nativo Java) ---
     
+    public static String generateUnconfiguredPasswordHash() {
+        return AUTO_PASSWORD_PREFIX + UUID.randomUUID();
+    }
+
+    public static boolean passwordNeedsSetup(String storedHash) {
+        return storedHash != null && storedHash.startsWith(AUTO_PASSWORD_PREFIX);
+    }
+
     public static String hashPassword(String password) {
         byte[] salt = new byte[16];
         RANDOM.nextBytes(salt);
@@ -260,16 +299,23 @@ public class LoginManager {
                Base64.getEncoder().encodeToString(hash);
     }
     
+    public static CompletableFuture<Boolean> checkPasswordAsync(String password, String storedHash) {
+        return CompletableFuture.supplyAsync(() -> checkPassword(password, storedHash));
+    }
+
     public static boolean checkPassword(String password, String storedHash) {
-        String[] parts = storedHash.split(":");
+        if (password == null || storedHash == null) return false;
+        String[] parts = storedHash.split(":", -1);
         if (parts.length != 2) return false;
-        
-        byte[] salt = Base64.getDecoder().decode(parts[0]);
-        byte[] originalHash = Base64.getDecoder().decode(parts[1]);
-        
-        byte[] newHash = pbkdf2(password.toCharArray(), salt);
-        
-        return Arrays.equals(originalHash, newHash);
+
+        try {
+            byte[] salt = Base64.getDecoder().decode(parts[0]);
+            byte[] originalHash = Base64.getDecoder().decode(parts[1]);
+            byte[] newHash = pbkdf2(password.toCharArray(), salt);
+            return MessageDigest.isEqual(originalHash, newHash);
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
     
     private static byte[] pbkdf2(char[] password, byte[] salt) {

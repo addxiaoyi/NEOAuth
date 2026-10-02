@@ -1,5 +1,7 @@
 package com.marcp.directauth.commands;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -12,77 +14,85 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 public class RegisterCommand {
-    
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("register")
-            .then(Commands.argument("password", StringArgumentType.word())
-                .executes(RegisterCommand::execute)
-            )
-        );
+                .then(Commands.argument("password", StringArgumentType.word())
+                        .executes(RegisterCommand::execute)));
     }
-    
+
     private static int execute(CommandContext<CommandSourceStack> context) {
-        // En Brigadier, verificar la fuente es crucial
         if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
             context.getSource().sendFailure(Component.literal(DirectAuth.getConfig().getLang().errNotPlayer));
             return 0;
         }
-        
-        String username = player.getGameProfile().getName();
-        String playerIp = player.getIpAddress();
 
-        // --- 1. CHECK ANTI-BOT: RETRASO TEMPORAL ---
-        long joinTime = DirectAuth.getLoginManager().getConnectionTime(player);
-        long secondsAlive = (System.currentTimeMillis() - joinTime) / 1000;
-        int requiredDelay = DirectAuth.getConfig().registrationDelay;
+        String username = player.getGameProfile().getName();
+        String password = StringArgumentType.getString(context, "password");
+        int requiredDelay = Math.max(0, DirectAuth.getConfig().registrationDelay);
+        long secondsAlive = (System.currentTimeMillis()
+                - DirectAuth.getLoginManager().getConnectionTime(player)) / 1000;
 
         if (secondsAlive < requiredDelay) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errRegistrationCooldown));
             return 0;
         }
-
-        // --- 2. CHECK ANTI-BOT: LÍMITE DE IP ---
-        int accountsOnIp = DirectAuth.getDatabase().countAccountsByIP(playerIp);
-        
-        if (accountsOnIp >= DirectAuth.getConfig().maxAccountsPerIP) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errIpLimitReached));
-            return 0;
-        }
-        
-        // Verificar si ya está registrado
-        if (DirectAuth.getDatabase().userExists(username)) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errAlreadyRegistered));
-            return 0;
-        }
-        
-        String password = StringArgumentType.getString(context, "password");
-        
-        // Validar contraseña
         if (password.length() < DirectAuth.getConfig().minPasswordLength) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errPasswordTooShort));
             return 0;
         }
-        
         if (password.length() > DirectAuth.getConfig().maxPasswordLength) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errPasswordTooLong));
             return 0;
         }
-        
-        // Crear usuario
+
         String hash = LoginManager.hashPassword(password);
-        DirectAuth.getDatabase().createUserAsync(username, hash, playerIp);
-        
-        // Autenticar automáticamente
-        DirectAuth.getLoginManager().setAuthenticated(player, true);
-        
-        // Restaurar posición original si existe (por si se movió al spawn al entrar)
-        DirectAuth.getPositionManager().restorePosition(player);
-        // Liberar ancla de restricción
-        PlayerRestrictionHandler.removeAnchor(player);
-        
-        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgRegistered));
-        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumEnableHint));
-        
+        String playerIp = player.getIpAddress();
+        int maxAccountsPerIp = DirectAuth.getConfig().maxAccountsPerIP;
+
+        CompletableFuture<RegistrationOutcome> registration = maxAccountsPerIp > 0
+                ? DirectAuth.getDatabase().countAccountsByIPAsync(playerIp)
+                        .thenCompose(count -> count >= maxAccountsPerIp
+                                ? CompletableFuture.completedFuture(RegistrationOutcome.IP_LIMIT)
+                                : DirectAuth.getDatabase().createUserIfAbsentAsync(username, hash, playerIp)
+                                        .thenApply(created -> created
+                                                ? RegistrationOutcome.CREATED
+                                                : RegistrationOutcome.ALREADY_REGISTERED))
+                : DirectAuth.getDatabase().createUserIfAbsentAsync(username, hash, playerIp)
+                        .thenApply(created -> created
+                                ? RegistrationOutcome.CREATED
+                                : RegistrationOutcome.ALREADY_REGISTERED);
+
+        registration.thenAcceptAsync(outcome -> {
+            if (!player.connection.isAcceptingMessages()) return;
+            if (outcome == RegistrationOutcome.IP_LIMIT) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errIpLimitReached));
+                return;
+            }
+            if (outcome == RegistrationOutcome.ALREADY_REGISTERED) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errAlreadyRegistered));
+                return;
+            }
+
+            DirectAuth.getLoginManager().setAuthenticated(player, true);
+            DirectAuth.getPositionManager().restorePosition(player);
+            PlayerRestrictionHandler.removeAnchor(player);
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgRegistered));
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumEnableHint));
+        }, player.getServer()).exceptionally(error -> {
+            player.getServer().execute(() -> {
+                if (player.connection.isAcceptingMessages()) {
+                    DirectAuth.LOGGER.error("Registration failed for {}", username, error);
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                }
+            });
+            return null;
+        });
         return 1;
+    }
+
+    private enum RegistrationOutcome {
+        CREATED,
+        ALREADY_REGISTERED,
+        IP_LIMIT
     }
 }

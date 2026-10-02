@@ -78,7 +78,7 @@ DirectAuth/
 - `initDatabase(Path)` and `initConfig(Path)` are called by `ConnectionHandler#onServerStarted`, *not* in the constructor (they need the world path).
 
 ### 4.2 `auth/`
-- **`LoginManager`** — central authentication state. Thread-safe (`ConcurrentHashMap`). Holds `authenticatedPlayers`, `failedAttempts`, `loginAttempts` (cooldown), `connectionTimes` (login timeout), `preLoginCache` (mixin-populated), `graceSessions` (IP-locked re-login). Runs a `ScheduledExecutorService` for grace-session cleanup at `sessionCleanupInterval` minutes.
+- **`LoginManager`** — central authentication state. Thread-safe (`ConcurrentHashMap`). Holds `authenticatedPlayers`, `failedAttempts`, `loginAttempts` (cooldown), `connectionTimes` (login timeout), `preLoginCache` (mixin-populated), `graceSessions` (time-limited re-login without IP binding), and short-lived automatic-login markers. Runs a `ScheduledExecutorService` for grace-session cleanup at `sessionCleanupInterval` minutes. It never stores plaintext passwords.
 - **Password hashing is PBKDF2WithHmacSHA256**, 100k iterations, 256-bit key, Base64 `salt:hash` encoding (see `LoginManager.ALGORITHM`).
 - **`MojangAPI`** — async UUID lookup against `api.mojang.com/users/profiles/minecraft/{name}`, returns `CompletableFuture<String>`. Callbacks must be marshalled back to the main thread via `server.execute(...)`.
 - **`ConfirmationManager`** — pending-action store (30s TTL) used by `/changepassword` and `/unregister`, drained by `/directauth confirm`.
@@ -104,7 +104,7 @@ All Brigadier-based. Registered through `RegisterCommandsEvent` in `DirectAuth`.
 - **`PlayerRestrictionHandler`** — enforces the unauthenticated-player jail. Anchors players with a `Map<UUID, Vec3>`, applies slowness/jump/blindness via `EntityTickEvent`, cancels block break, left/right click, item drop/pickup, mount, attack, chat (except `/register` `/login` `/online`), damage (set to 0), and healing. Sends the auth reminder every ~5 seconds (100 ticks). Kicks if `loginTimeout` elapsed.
 
 ### 4.5 `mixin/`
-- **`MixinServerLoginPacketListenerImpl`** — async pre-load of `UserData` during the login handshake so `PlayerLoggedInEvent` doesn't block on SQLite.
+- **`MixinServerLoginPacketListenerImpl`** — async pre-load of `UserData` during the login handshake so `PlayerLoggedInEvent` doesn't block on SQLite. It requests Mojang session verification for registered accounts when `premiumAutoLogin` is enabled. A successful verification promotes an offline account to its Mojang UUID and runs the existing migration logic before the player enters the world. With `premiumAutoRegister=true`, a first verified Mojang profile creates a local premium account with a placeholder password; the player can set a fallback with `/setpassword`. When verification is explicitly rejected, unavailable, or exceeds vanilla's login timeout, known premium accounts use the database `onlineUUID` and require `/login`; they never switch to an offline UUID. Unknown accounts are never created without a successful Mojang verification.
 - **`PlayerListAccessor`** — invoker for the protected `PlayerList.save()` used by `MigrationManager` to flush dirty player files before renaming on premium conversion.
 
 ### 4.6 `data/`
@@ -132,10 +132,10 @@ Gson, pretty-printed. Loaded once on `ServerStartedEvent`; missing fields are fi
 | Group | Fields (defaults) |
 |---|---|
 | General | `language` (`"en"`) |
-| Session | `sessionGracePeriod` (600s), `sessionCleanupInterval` (10 min) |
+| Session | `sessionGracePeriod` (1800s / 30 min), `sessionCleanupInterval` (10 min) |
 | Password | `minPasswordLength` (4), `maxPasswordLength` (32) |
-| Login flood | `maxLoginAttempts` (5), `loginCooldownMs` (3000), `loginTimeout` (60s) |
-| Anti-bot | `registrationDelay` (1s), `maxAccountsPerIP` (5) |
+| Login flood | `maxLoginAttempts` (5), `loginCooldownMs` (3000), `loginTimeout` (60s), `premiumLoginFallbackOnFailure` (`true`), `premiumAutoLogin` (`true`), `premiumAutoRegister` (`true`), `premiumVerificationTimeoutSeconds` (`15`) |
+| Anti-bot | `registrationDelay` (1s), `maxAccountsPerIP` (5; 0 disables the per-IP limit) |
 | Migration | `migrationMap` — directory → `MigrationMode` |
 
 ### 5.2 `LangConfig` (`world/serverconfig/DirectAuth-lang-<code>.json`)

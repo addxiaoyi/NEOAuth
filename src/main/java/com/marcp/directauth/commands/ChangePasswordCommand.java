@@ -13,55 +13,54 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 public class ChangePasswordCommand {
-
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("changepassword")
-            .then(Commands.argument("oldPassword", StringArgumentType.string())
-                .then(Commands.argument("newPassword", StringArgumentType.word())
-                    .executes(ChangePasswordCommand::execute)
-                )
-            )
-        );
+                .then(Commands.argument("oldPassword", StringArgumentType.string())
+                        .then(Commands.argument("newPassword", StringArgumentType.word())
+                                .executes(ChangePasswordCommand::execute))));
     }
 
     private static int execute(CommandContext<CommandSourceStack> context) {
         if (!(context.getSource().getEntity() instanceof ServerPlayer player)) return 0;
-
         if (!DirectAuth.getLoginManager().isAuthenticated(player)) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errNotAuthenticated));
             return 0;
         }
 
         String username = player.getGameProfile().getName();
-        String oldPass = StringArgumentType.getString(context, "oldPassword");
-        String newPass = StringArgumentType.getString(context, "newPassword");
-
-        // 1. Validar contraseña antigua
-        UserData userData = DirectAuth.getDatabase().getUser(username);
-        if (!LoginManager.checkPassword(oldPass, userData.getPasswordHash())) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errOldPasswordWrong));
-            return 0;
-        }
-
-        // 2. Validar longitud nueva
-        if (newPass.length() < DirectAuth.getConfig().minPasswordLength || 
-            newPass.length() > DirectAuth.getConfig().maxPasswordLength) {
+        String oldPassword = StringArgumentType.getString(context, "oldPassword");
+        String newPassword = StringArgumentType.getString(context, "newPassword");
+        if (newPassword.length() < DirectAuth.getConfig().minPasswordLength
+                || newPassword.length() > DirectAuth.getConfig().maxPasswordLength) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errPasswordTooShort));
             return 0;
         }
 
-        // 3. Solicitar Confirmación
-        ConfirmationManager.requestConfirmation(player, () -> {
-            String newHash = LoginManager.hashPassword(newPass);
-            userData.setPasswordHash(newHash);
-            // Si cambian la pass, desactivamos premium para evitar inconsistencias
-            userData.setPremium(false); 
-            userData.setOnlineUUID(null);
-            
-            DirectAuth.getDatabase().updateUserAsync(username, userData);
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPasswordChanged));
-        });
-
+        DirectAuth.getDatabase().getUserAsync(username)
+                .thenCompose(user -> user == null
+                        ? java.util.concurrent.CompletableFuture.completedFuture(new Verification(null, false))
+                        : LoginManager.checkPasswordAsync(oldPassword, user.getPasswordHash())
+                                .thenApply(valid -> new Verification(user, valid)))
+                .thenAcceptAsync(result -> {
+                    if (!player.connection.isAcceptingMessages()) return;
+                    if (!result.passwordValid()) {
+                        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errOldPasswordWrong));
+                        return;
+                    }
+                    ConfirmationManager.requestConfirmation(player, () ->
+                            java.util.concurrent.CompletableFuture.supplyAsync(() -> LoginManager.hashPassword(newPassword))
+                                    .thenAcceptAsync(newHash -> {
+                                        UserData updated = result.userData();
+                                        if (updated == null || !player.connection.isAcceptingMessages()) return;
+                                        updated.setPasswordHash(newHash);
+                                        updated.setPremium(false);
+                                        updated.setOnlineUUID(null);
+                                        DirectAuth.getDatabase().updateUserAsync(username, updated);
+                                        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPasswordChanged));
+                                    }, player.getServer()));
+                }, player.getServer());
         return 1;
     }
+
+    private record Verification(UserData userData, boolean passwordValid) {}
 }

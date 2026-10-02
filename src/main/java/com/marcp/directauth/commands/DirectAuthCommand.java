@@ -113,6 +113,7 @@ public class DirectAuthCommand {
         // mod's built-in defaults (this discards any manual customizations in those files).
         try {
             Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-en.json"));
+            Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-zh.json"));
             Files.deleteIfExists(serverConfig.resolve("DirectAuth-lang-es.json"));
         } catch (IOException e) {
             DirectAuth.LOGGER.error("DirectAuth: Failed to delete language files: {}", e.getMessage());

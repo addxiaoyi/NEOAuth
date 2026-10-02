@@ -1,6 +1,7 @@
 package com.marcp.directauth.events;
 
 import com.marcp.directauth.DirectAuth;
+import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.data.UserData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -63,17 +64,38 @@ public class ConnectionHandler {
 
     // Método auxiliar para no duplicar código
     private void processLogin(ServerPlayer player, UserData userData) {
-        boolean isAuthenticated = false;
+        boolean automaticPremiumLogin = DirectAuth.getLoginManager()
+                .consumeAutomaticPremiumLogin(player.getUUID());
+        boolean isAuthenticated = automaticPremiumLogin;
+
+        if (automaticPremiumLogin) {
+            DirectAuth.getLoginManager().setAuthenticated(player, true);
+            boolean passwordNeedsSetup = userData != null
+                    && LoginManager.passwordNeedsSetup(userData.getPasswordHash());
+            player.sendSystemMessage(Component.literal(passwordNeedsSetup
+                    ? DirectAuth.getConfig().getLang().msgPremiumAccountCreated
+                    : DirectAuth.getConfig().getLang().msgAutoLogin));
+            if (passwordNeedsSetup) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoPasswordSetup));
+            }
+        }
+        boolean premiumPasswordFallback = DirectAuth.getLoginManager()
+                .consumePremiumPasswordFallback(player.getUUID());
 
         // Caso Premium
-        if (userData != null && userData.isPremium()) {
+        if (!automaticPremiumLogin && userData != null && userData.isPremium()) {
             String expectedUUID = userData.getOnlineUUID();
             String actualUUID = player.getStringUUID();
             
-            if (expectedUUID != null && expectedUUID.equals(actualUUID)) {
+            if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)
+                    && !premiumPasswordFallback) {
                 DirectAuth.getLoginManager().setAuthenticated(player, true);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
                 isAuthenticated = true;
+            } else if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)) {
+                DirectAuth.getLoginManager().invalidateSession(player);
+                DirectAuth.LOGGER.info("Known premium player {} is using password login with UUID {}",
+                        player.getGameProfile().getName(), actualUUID);
             } else {
                 player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgPremiumError));
                 return;
@@ -82,7 +104,7 @@ public class ConnectionHandler {
 
         if (!isAuthenticated) {
             // INTENTO DE RESTAURACIÓN DE SESIÓN
-            if (DirectAuth.getLoginManager().tryRestoreSession(player)) {
+            if (!premiumPasswordFallback && DirectAuth.getLoginManager().tryRestoreSession(player)) {
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgSessionRestored));
                 isAuthenticated = true;
             }
@@ -105,11 +127,15 @@ public class ConnectionHandler {
             // estado real persiste y se resincronizará al autenticar.
             PlayerRestrictionHandler.hideEffectsFromClient(player);
             
-            if (userData == null) {
+            if (premiumPasswordFallback) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumFallbackLogin));
+            } else if (userData == null) {
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgWelcome));
             } else {
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgLoginRequest));
-                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumHint));
+                if (!userData.isPremium()) {
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumHint));
+                }
             }
         }
     }

@@ -3,7 +3,7 @@ package com.marcp.directauth.commands;
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.auth.MojangAPI;
-import com.marcp.directauth.data.MigrationManager; // Importamos el nuevo Manager
+import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.marcp.directauth.mixin.PlayerListAccessor;
 import com.mojang.brigadier.CommandDispatcher;
@@ -14,86 +14,103 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.concurrent.CompletableFuture;
+
 public class PremiumCommand {
-    
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("online")
-            .executes(context -> execute(context, null))
-            .then(Commands.argument("password", StringArgumentType.string())
-                .executes(context -> execute(context, StringArgumentType.getString(context, "password")))
-            )
-        );
+                .executes(context -> execute(context, null))
+                .then(Commands.argument("password", StringArgumentType.string())
+                        .executes(context -> execute(context, StringArgumentType.getString(context, "password")))));
     }
-    
+
     private static int execute(CommandContext<CommandSourceStack> context, String password) {
         if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
             context.getSource().sendFailure(Component.literal(DirectAuth.getConfig().getLang().errNotPlayer));
             return 0;
         }
-        
         if (!DirectAuth.getLoginManager().isAuthenticated(player)) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errNotAuthenticated));
             return 0;
         }
-        
-        String username = player.getGameProfile().getName();
-        UserData userData = DirectAuth.getDatabase().getUser(username);
-        
-        if (userData == null) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errUserNotFound));
-            return 0;
-        }
-        
-        if (userData.isPremium()) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAlreadyPremium));
-            return 0;
-        }
 
+        String username = player.getGameProfile().getName();
         if (password == null) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgOnlineModeWarning));
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumWarning));
             return 1;
         }
 
-        if (!LoginManager.checkPassword(password, userData.getPasswordHash())) {
-             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errWrongPasswordSimple));
-             return 0;
-        }
-        
-        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgVerifying));
-        
-        MojangAPI.getOnlineUUID(username).thenAccept(uuid -> {
-            context.getSource().getServer().execute(() -> {
-                if (uuid == null) {
-                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errMojangNotFound));
-                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgMojangHint));
-                } else {
-                    String formattedUUID = MojangAPI.formatUUID(uuid);
-                    
-                    // --- MIGRACIÓN DE DATOS (Delegada al Manager) ---
-                    // Guardar datos actuales del jugador antes de migrar
-                    ((PlayerListAccessor) player.getServer().getPlayerList()).callSave(player);
-
-                    boolean migrationSuccess = MigrationManager.migratePlayerData(player, formattedUUID);
-                    
-                    if (!migrationSuccess) {
-                        DirectAuth.LOGGER.error("DirectAuth: Error migrating data for {}", username);
-                    }
-
-                    // Actualizar DB
-                    userData.setPremium(true);
-                    userData.setOnlineUUID(formattedUUID);
-                    DirectAuth.getDatabase().updateUser(username, userData);
-                    
-                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumSuccess));
-                    
-                    player.connection.disconnect(Component.literal(
-                        DirectAuth.getConfig().getLang().msgPremiumKick
-                    ));
-                }
-            });
-        });
-        
+        DirectAuth.getDatabase().getUserAsync(username)
+                .thenCompose(user -> {
+                    if (user == null) return CompletableFuture.completedFuture(new Verification(user, false));
+                    return LoginManager.checkPasswordAsync(password, user.getPasswordHash())
+                            .thenApply(valid -> new Verification(user, valid));
+                })
+                .thenAcceptAsync(result -> continueVerification(player, username, result), player.getServer())
+                .exceptionally(error -> {
+                    player.getServer().execute(() -> {
+                        if (player.connection.isAcceptingMessages()) {
+                            DirectAuth.LOGGER.error("Premium command lookup failed for {}", username, error);
+                            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                        }
+                    });
+                    return null;
+                });
         return 1;
     }
+
+    private static void continueVerification(ServerPlayer player, String username, Verification verification) {
+        if (!player.connection.isAcceptingMessages()) return;
+        UserData userData = verification.userData();
+        if (userData == null) {
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errUserNotFound));
+            return;
+        }
+        if (userData.isPremium()) {
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAlreadyPremium));
+            return;
+        }
+        if (!verification.passwordValid()) {
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errWrongPasswordSimple));
+            return;
+        }
+
+        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgVerifying));
+        MojangAPI.getOnlineUUID(username).thenAcceptAsync(uuid -> {
+            if (!player.connection.isAcceptingMessages()) return;
+            if (uuid == null) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errMojangNotFound));
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgMojangHint));
+                return;
+            }
+
+            String formattedUUID = MojangAPI.formatUUID(uuid);
+            if (formattedUUID == null) {
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errMojangNotFound));
+                return;
+            }
+
+            ((PlayerListAccessor) player.getServer().getPlayerList()).callSave(player);
+            String sourceUuid = player.getStringUUID();
+            CompletableFuture.supplyAsync(() -> MigrationManager.migratePlayerData(
+                            player.getServer(), sourceUuid, formattedUUID))
+                    .thenAcceptAsync(migrated -> {
+                        if (!player.connection.isAcceptingMessages()) return;
+                        if (!migrated) {
+                            DirectAuth.LOGGER.error("DirectAuth: Error migrating data for {}", username);
+                            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                            return;
+                        }
+
+                        userData.setPremium(true);
+                        userData.setOnlineUUID(formattedUUID);
+                        DirectAuth.getDatabase().updateUserAsync(username, userData);
+                        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPremiumSuccess));
+                        player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgPremiumKick));
+                    }, player.getServer());
+        }, player.getServer());
+    }
+
+    private record Verification(UserData userData, boolean passwordValid) {}
 }

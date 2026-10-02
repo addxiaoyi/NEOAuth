@@ -10,133 +10,115 @@ import com.marcp.directauth.data.UserData;
 import com.marcp.directauth.events.PlayerRestrictionHandler;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import java.util.Optional;
-import net.minecraft.world.level.block.BedBlock; // Added import
-import net.minecraft.world.level.block.RespawnAnchorBlock; // Added import
-import net.minecraft.world.level.block.state.BlockState; // Added import
-import net.minecraft.world.level.block.Block; // Added import
-import net.minecraft.world.entity.EntityType; // Added import
 
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public class LoginCommand {
-    
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("login")
-            .then(Commands.argument("password", StringArgumentType.greedyString())
-                .executes(LoginCommand::execute)
-            )
-        );
+                .then(Commands.argument("password", StringArgumentType.greedyString())
+                        .executes(LoginCommand::execute)));
     }
-    
+
     private static int execute(CommandContext<CommandSourceStack> context) {
         if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
             context.getSource().sendFailure(Component.literal(DirectAuth.getConfig().getLang().errNotPlayer));
             return 0;
         }
-        
-        String username = player.getGameProfile().getName();
-        UserData userData = DirectAuth.getDatabase().getUser(username);
-        
-        // Verificar si está registrado
-        if (userData == null) {
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errNotRegistered));
-            return 0;
-        }
-        
-        // Verificar si ya está autenticado
         if (DirectAuth.getLoginManager().isAuthenticated(player)) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errAlreadyAuthenticated));
             return 0;
         }
-        
-        // Verificar cooldown
         if (!DirectAuth.getLoginManager().canAttemptLogin(player)) {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errCooldown));
             return 0;
         }
-        
-        // Verificar si excedió intentos
         if (DirectAuth.getLoginManager().hasExceededMaxAttempts(player)) {
             player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().errMaxAttempts));
             return 0;
         }
-        
+
+        String username = player.getGameProfile().getName();
         String password = StringArgumentType.getString(context, "password");
-        
-        // Verificar contraseña
-        if (LoginManager.checkPassword(password, userData.getPasswordHash())) {
-            DirectAuth.getLoginManager().setAuthenticated(player, true);
-            DirectAuth.getLoginManager().recordLoginAttempt(player, true);
-            
-            // [CAMBIO CLAVE] Lógica de Retorno Inteligente
-            boolean restored = DirectAuth.getPositionManager().restorePosition(player);
-            
-            if (!restored) {
-                // Caso: Entró muerto o es nuevo -> Enviar a Cama/Nexo
-                BlockPos respawnPos = player.getRespawnPosition();
-                ResourceKey<Level> respawnDim = player.getRespawnDimension();
+        CompletableFuture<LoginResult> login = DirectAuth.getDatabase().getUserAsync(username)
+                .thenCompose(user -> {
+                    if (user == null) return CompletableFuture.completedFuture(new LoginResult(null, false));
+                    return LoginManager.checkPasswordAsync(password, user.getPasswordHash())
+                            .thenApply(valid -> new LoginResult(user, valid));
+                });
 
-                if (respawnPos != null) {
-                    ServerLevel level = player.getServer().getLevel(respawnDim);
-                    if (level != null) {
-                        // --- LÓGICA CORREGIDA PARA 1.21 ---
-                        Optional<Vec3> safePos = Optional.empty();
-                        
-                        // Verificar si el bloque en la posición de respawn es válido
-                        BlockState state = level.getBlockState(respawnPos);
-                        Block block = state.getBlock();
-
-                        if (block instanceof BedBlock) {
-                            // Calcular posición segura para levantarse de la cama
-                            safePos = BedBlock.findStandUpPosition(
-                                EntityType.PLAYER, 
-                                level, 
-                                respawnPos, 
-                                state.getValue(BedBlock.FACING), 
-                                player.getRespawnAngle()
-                            );
-                        } else if (block instanceof RespawnAnchorBlock) {
-                            // Calcular posición segura para el nexo de reaparición
-                            safePos = RespawnAnchorBlock.findStandUpPosition(
-                                EntityType.PLAYER, 
-                                level, 
-                                respawnPos
-                            );
-                        } else if (player.isRespawnForced()) {
-                            // Si el respawn es forzado (comando) y no hay cama/nexo, usar la posición tal cual
-                            safePos = Optional.of(Vec3.atBottomCenterOf(respawnPos));
+        login.thenAcceptAsync(result -> finishLogin(player, result), player.getServer())
+                .exceptionally(error -> {
+                    player.getServer().execute(() -> {
+                        if (player.connection.isAcceptingMessages()) {
+                            DirectAuth.LOGGER.error("Login lookup failed for {}", username, error);
+                            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
                         }
-                        // ------------------------------------
+                    });
+                    return null;
+                });
+        return 1;
+    }
 
-                        if (safePos.isPresent()) {
-                            Vec3 pos = safePos.get();
-                            player.teleportTo(level, pos.x, pos.y, pos.z, player.getRespawnAngle(), 0.0F);
-                        }
-                    }
-                }
-            }
-
-            // Liberar ancla de restricción
-            PlayerRestrictionHandler.removeAnchor(player);
-
-            // Resincronizar HUD de efectos (limpiados al entrar en limbo)
-            PlayerRestrictionHandler.resyncEffectsToClient(player);
-
-            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAuthenticated));
-            return 1;
-        } else {
+    private static void finishLogin(ServerPlayer player, LoginResult result) {
+        if (!player.connection.isAcceptingMessages() || DirectAuth.getLoginManager().isAuthenticated(player)) return;
+        if (result.userData() == null) {
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errNotRegistered));
+            return;
+        }
+        if (!result.passwordValid()) {
             DirectAuth.getLoginManager().recordLoginAttempt(player, false);
             int attempts = DirectAuth.getLoginManager().getFailedAttempts(player);
-            player.sendSystemMessage(Component.literal(LangConfig.format(DirectAuth.getConfig().getLang().errWrongPassword, attempts, DirectAuth.getConfig().maxLoginAttempts)));
-            return 0;
+            player.sendSystemMessage(Component.literal(LangConfig.format(
+                    DirectAuth.getConfig().getLang().errWrongPassword,
+                    attempts, DirectAuth.getConfig().maxLoginAttempts)));
+            return;
         }
+
+        DirectAuth.getLoginManager().setAuthenticated(player, true);
+        DirectAuth.getLoginManager().recordLoginAttempt(player, true);
+        restorePlayer(player);
+        PlayerRestrictionHandler.removeAnchor(player);
+        PlayerRestrictionHandler.resyncEffectsToClient(player);
+        player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAuthenticated));
     }
+
+    private static void restorePlayer(ServerPlayer player) {
+        if (DirectAuth.getPositionManager().restorePosition(player)) return;
+
+        BlockPos respawnPos = player.getRespawnPosition();
+        ResourceKey<Level> respawnDim = player.getRespawnDimension();
+        if (respawnPos == null) return;
+
+        ServerLevel level = player.getServer().getLevel(respawnDim);
+        if (level == null) return;
+
+        BlockState state = level.getBlockState(respawnPos);
+        Block block = state.getBlock();
+        Optional<Vec3> safePos = Optional.empty();
+        if (block instanceof BedBlock) {
+            safePos = BedBlock.findStandUpPosition(EntityType.PLAYER, level, respawnPos,
+                    state.getValue(BedBlock.FACING), player.getRespawnAngle());
+        } else if (block instanceof RespawnAnchorBlock) {
+            safePos = RespawnAnchorBlock.findStandUpPosition(EntityType.PLAYER, level, respawnPos);
+        } else if (player.isRespawnForced()) {
+            safePos = Optional.of(Vec3.atBottomCenterOf(respawnPos));
+        }
+        safePos.ifPresent(pos -> player.teleportTo(level, pos.x, pos.y, pos.z, player.getRespawnAngle(), 0.0F));
+    }
+
+    private record LoginResult(UserData userData, boolean passwordValid) {}
 }

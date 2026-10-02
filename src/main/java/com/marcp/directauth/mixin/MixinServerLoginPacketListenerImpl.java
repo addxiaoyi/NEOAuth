@@ -1,9 +1,18 @@
 package com.marcp.directauth.mixin;
 
 import com.marcp.directauth.DirectAuth;
+import com.marcp.directauth.auth.LoginManager;
+import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.mojang.authlib.GameProfile;
+import java.net.InetSocketAddress;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.network.Connection;
+import net.minecraft.network.DisconnectionDetails;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.protocol.login.ClientboundHelloPacket;
 import net.minecraft.network.protocol.login.ServerboundHelloPacket;
 import net.minecraft.server.MinecraftServer;
@@ -12,6 +21,7 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -24,85 +34,323 @@ public abstract class MixinServerLoginPacketListenerImpl {
     @Shadow private byte[] challenge;
     @Shadow private ServerLoginPacketListenerImpl.State state;
     @Shadow private String requestedUsername;
+    @Shadow public abstract void disconnect(Component reason);
 
-    // --- NUEVO: Bandera para evitar bucles infinitos ---
     @Unique
-    private boolean directAuth$isDataPreloaded = false;
+    private boolean directAuth$isDataPreloaded;
+
+    @Unique
+    private volatile UUID directAuth$premiumUuid;
+
+    @Unique
+    private volatile UserData directAuth$loginData;
+
+    @Unique
+    private volatile boolean directAuth$automaticPremiumProbe;
+
+    @Unique
+    private volatile boolean directAuth$automaticPremiumRegistrationStarted;
+
+    @Unique
+    private volatile boolean directAuth$isStartingVerifiedProfile;
+
+    @Unique
+    private volatile boolean directAuth$premiumFallbackStarted;
+
+    @Unique
+    private volatile long directAuth$premiumHandshakeStartedAt;
+
+    @Unique
+    private boolean directAuth$isStartingPremiumFallback;
 
     @Inject(method = "handleHello", at = @At("HEAD"), cancellable = true)
     public void onHandleHello(ServerboundHelloPacket packet, CallbackInfo ci) {
-        // Si el servidor es premium nativo, ignoramos
         if (this.server.usesAuthentication()) return;
 
         String username = packet.name();
-        
-        // Safety check por si la DB no cargó
         if (DirectAuth.getDatabase() == null) return;
 
-        // --- FASE 1: Si no hemos cargado los datos, PAUSAMOS el login ---
         if (!this.directAuth$isDataPreloaded) {
-            // 1. Cancelamos el procesamiento normal (El jugador se queda "esperando")
             ci.cancel();
-
-            // 2. Iniciamos la búsqueda asíncrona (Hilo secundario)
             DirectAuth.getDatabase().getUserAsync(username).thenAcceptAsync(data -> {
-                
-                // 3. Cuando termina, guardamos en caché (Hilo principal gracias a thenAcceptAsync...server)
+                if (!this.connection.isConnected()) return;
                 if (DirectAuth.getLoginManager() != null) {
                     DirectAuth.getLoginManager().addPreLoadedData(username, data);
                 }
-
-                // 4. Marcamos que ya tenemos los datos
                 this.directAuth$isDataPreloaded = true;
-
-                // 5. REINICIAMOS el proceso: Llamamos a handleHello de nuevo.
-                // Como ahora la bandera es true, pasará a la FASE 2.
                 this.handleHello(packet);
-
-            }, this.server); // <- IMPORTANTE: Ejecutar el callback en el hilo del servidor
-            
-            return; // Salimos y esperamos al futuro
+            }, this.server);
+            return;
         }
 
-        // --- FASE 2: Ya tenemos datos (Ejecución Síncrona pero Rápida) ---
-        
-        // Intentamos sacar los datos de la MEMORIA (Caché), no del disco
         UserData data = null;
         if (DirectAuth.getLoginManager() != null) {
-            // Truco: Recuperamos el dato que acabamos de poner en caché
-             data = DirectAuth.getLoginManager().getAndRemovePreLoadedData(username);
-             
-             // Lo volvemos a poner porque ConnectionHandler lo necesitará luego al entrar al mundo
-             if (data != null) DirectAuth.getLoginManager().addPreLoadedData(username, data);
+            data = DirectAuth.getLoginManager().getAndRemovePreLoadedData(username);
+            if (data != null) DirectAuth.getLoginManager().addPreLoadedData(username, data);
         }
-
-        // Fallback: Si falló la caché, leemos disco (no debería pasar si Fase 1 funcionó)
         if (data == null) {
             data = DirectAuth.getDatabase().getUser(username);
         }
 
-        // Lógica de Premium (Handshake de encriptación)
+        this.directAuth$loginData = data;
+        if (data == null && (DirectAuth.getConfig() == null || !DirectAuth.getConfig().premiumAutoLogin)) return;
+
+        UUID premiumUuid = null;
         if (data != null && data.isPremium() && data.getOnlineUUID() != null) {
             try {
-                this.requestedUsername = username;
-                this.state = ServerLoginPacketListenerImpl.State.KEY;
-                
-                this.connection.send(new ClientboundHelloPacket(
-                    "", // Server ID vacío usualmente
-                    this.server.getKeyPair().getPublic().getEncoded(), 
-                    this.challenge, 
-                    true
-                ));
-                
-                ci.cancel(); // Cancelamos para que Vanilla no intente hacer su propia lógica offline
-                
-            } catch (Exception e) {
-                DirectAuth.LOGGER.error("DirectAuth: Premium handshake error: {}", e.getMessage());
+                premiumUuid = UUID.fromString(data.getOnlineUUID());
+            } catch (IllegalArgumentException exception) {
+                DirectAuth.LOGGER.error("Invalid stored premium UUID for {}", username, exception);
+                return;
             }
+        } else if (DirectAuth.getConfig() != null && DirectAuth.getConfig().premiumAutoLogin) {
+            this.directAuth$automaticPremiumProbe = true;
+        } else {
+            return;
+        }
+
+        try {
+            this.directAuth$premiumUuid = premiumUuid;
+            this.requestedUsername = username;
+            this.state = ServerLoginPacketListenerImpl.State.KEY;
+            this.connection.send(new ClientboundHelloPacket(
+                    "",
+                    this.server.getKeyPair().getPublic().getEncoded(),
+                    this.challenge,
+                    true));
+            this.directAuth$premiumHandshakeStartedAt = System.currentTimeMillis();
+            ci.cancel();
+        } catch (Exception exception) {
+            DirectAuth.LOGGER.error("Premium handshake failed for {}", username, exception);
         }
     }
-    
-    // Shadow del método handleHello para poder llamarlo recursivamente
+
+    @Inject(method = "onDisconnect", at = @At("HEAD"))
+    private void directAuth$clearLoginCache(DisconnectionDetails details, CallbackInfo ci) {
+        if (DirectAuth.getLoginManager() != null) {
+            DirectAuth.getLoginManager().clearPreLoadedData(this.requestedUsername);
+        }
+    }
+
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void directAuth$watchPremiumVerification(CallbackInfo ci) {
+        if ((this.directAuth$premiumUuid == null && !this.directAuth$automaticPremiumProbe)
+                || this.directAuth$premiumFallbackStarted
+                || DirectAuth.getConfig() == null
+                || !DirectAuth.getConfig().premiumLoginFallbackOnFailure
+                || this.directAuth$premiumHandshakeStartedAt <= 0) {
+            return;
+        }
+
+        long timeoutMs = Math.max(1, DirectAuth.getConfig().premiumVerificationTimeoutSeconds) * 1000L;
+        if (System.currentTimeMillis() - this.directAuth$premiumHandshakeStartedAt < timeoutMs) return;
+        if (this.state != ServerLoginPacketListenerImpl.State.KEY
+                && this.state != ServerLoginPacketListenerImpl.State.AUTHENTICATING) {
+            return;
+        }
+
+        if (this.directAuth$startKnownPremiumFallback()) {
+            DirectAuth.LOGGER.warn("Mojang verification timed out for {}; using password fallback", this.requestedUsername);
+        }
+    }
+
+    @Inject(method = "disconnect", at = @At("HEAD"), cancellable = true)
+    private void directAuth$allowPasswordFallback(Component reason, CallbackInfo ci) {
+        UUID premiumUuid = this.directAuth$premiumUuid;
+        if (!directAuth$isMojangVerificationFailure(reason)) return;
+
+        if (premiumUuid == null && this.directAuth$automaticPremiumProbe) {
+            this.directAuth$startOfflineFallback();
+            ci.cancel();
+            return;
+        }
+
+        if (premiumUuid == null
+                || DirectAuth.getConfig() == null
+                || !DirectAuth.getConfig().premiumLoginFallbackOnFailure) {
+            return;
+        }
+
+        if (this.directAuth$startKnownPremiumFallback()) {
+            ci.cancel();
+        }
+    }
+
+    @Unique
+    private boolean directAuth$startKnownPremiumFallback() {
+        UUID premiumUuid = this.directAuth$premiumUuid;
+        String username = this.requestedUsername;
+        if (premiumUuid == null || username == null) return false;
+
+        synchronized (this) {
+            if (this.directAuth$premiumFallbackStarted) return true;
+            this.directAuth$premiumFallbackStarted = true;
+        }
+
+        try {
+            this.directAuth$isStartingPremiumFallback = true;
+            if (DirectAuth.getLoginManager() == null) {
+                throw new IllegalStateException("Login manager is not initialized");
+            }
+            DirectAuth.getLoginManager().markPremiumPasswordFallback(premiumUuid);
+            this.directAuth$startClientVerification(new GameProfile(premiumUuid, username));
+            DirectAuth.LOGGER.warn(
+                    "Mojang verification failed for known premium player {}; retaining UUID {} for password login",
+                    username, premiumUuid);
+            return true;
+        } catch (RuntimeException exception) {
+            this.directAuth$premiumFallbackStarted = false;
+            if (DirectAuth.getLoginManager() != null) {
+                DirectAuth.getLoginManager().clearPremiumPasswordFallback(premiumUuid);
+            }
+            DirectAuth.LOGGER.error("Could not start password fallback for {}", username, exception);
+            return false;
+        } finally {
+            this.directAuth$isStartingPremiumFallback = false;
+        }
+    }
+
+    @Unique
+    private void directAuth$startOfflineFallback() {
+        if (this.directAuth$premiumFallbackStarted) return;
+        String username = this.requestedUsername;
+        if (username == null) return;
+
+        this.directAuth$premiumFallbackStarted = true;
+        try {
+            this.directAuth$isStartingPremiumFallback = true;
+            this.directAuth$startClientVerification(UUIDUtil.createOfflineProfile(username));
+            DirectAuth.LOGGER.info("Premium auto-login unavailable for {}; using password login", username);
+        } finally {
+            this.directAuth$isStartingPremiumFallback = false;
+        }
+    }
+
+    @Inject(method = "startClientVerification", at = @At("HEAD"), cancellable = true)
+    private void directAuth$handleVerifiedProfile(GameProfile profile, CallbackInfo ci) {
+        if (this.directAuth$premiumFallbackStarted && !this.directAuth$isStartingPremiumFallback) {
+            ci.cancel();
+            return;
+        }
+
+        if (this.directAuth$premiumUuid != null
+                && !this.directAuth$premiumUuid.equals(profile.getId())
+                && !this.directAuth$isStartingPremiumFallback) {
+            ci.cancel();
+            this.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgPremiumError));
+            DirectAuth.LOGGER.warn("Premium UUID mismatch during LOGIN for {}: expected {}, received {}",
+                    this.requestedUsername, this.directAuth$premiumUuid, profile.getId());
+            return;
+        }
+
+        if (this.directAuth$isStartingPremiumFallback || !this.directAuth$automaticPremiumProbe) return;
+        if (this.directAuth$isStartingVerifiedProfile) return;
+        if (this.directAuth$automaticPremiumRegistrationStarted) {
+            ci.cancel();
+            return;
+        }
+
+        String username = this.requestedUsername;
+        if (username == null || !username.equalsIgnoreCase(profile.getName())) {
+            ci.cancel();
+            this.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgPremiumError));
+            return;
+        }
+
+        if (DirectAuth.getConfig() == null || !DirectAuth.getConfig().premiumAutoRegister) {
+            ci.cancel();
+            this.directAuth$startOfflineFallback();
+            return;
+        }
+
+        this.directAuth$automaticPremiumRegistrationStarted = true;
+        ci.cancel();
+        this.directAuth$completeAutomaticPremiumRegistration(profile);
+    }
+
+    @Unique
+    private void directAuth$completeAutomaticPremiumRegistration(GameProfile profile) {
+        String username = this.requestedUsername;
+        if (username == null) return;
+
+        String sourceUuid = UUIDUtil.createOfflineProfile(username).getId().toString();
+        String targetUuid = profile.getId().toString();
+        boolean needsMigration = !sourceUuid.equalsIgnoreCase(targetUuid);
+        CompletableFuture<Boolean> migration = needsMigration
+                ? CompletableFuture.supplyAsync(() -> MigrationManager.migratePlayerData(this.server, sourceUuid, targetUuid))
+                : CompletableFuture.completedFuture(true);
+
+        migration.thenCompose(migrated -> {
+            if (!migrated) return CompletableFuture.<UserData>completedFuture(null);
+            String ip = this.directAuth$remoteAddress();
+            String passwordHash = LoginManager.generateUnconfiguredPasswordHash();
+            return DirectAuth.getDatabase().createPremiumUserIfAbsentAsync(username, passwordHash, ip, targetUuid)
+                    .thenCompose(created -> {
+                        if (created) {
+                            UserData createdUser = new UserData(username, passwordHash);
+                            createdUser.setPremium(true);
+                            createdUser.setOnlineUUID(targetUuid);
+                            return CompletableFuture.completedFuture(createdUser);
+                        }
+                        return DirectAuth.getDatabase().getUserAsync(username).thenCompose(existing -> {
+                            if (existing == null) return null;
+                            existing.setPremium(true);
+                            existing.setOnlineUUID(targetUuid);
+                            return DirectAuth.getDatabase().updateUserAsync(username, existing)
+                                    .thenApply(ignored -> existing);
+                        });
+                    });
+        }).thenAcceptAsync(account -> {
+            if (account == null || !this.connection.isConnected()) {
+                if (this.connection.isConnected()) {
+                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                }
+                return;
+            }
+
+            this.directAuth$isStartingVerifiedProfile = true;
+            this.directAuth$loginData = account;
+            if (DirectAuth.getLoginManager() != null) {
+                DirectAuth.getLoginManager().markAutomaticPremiumLogin(profile.getId());
+            }
+            this.directAuth$startClientVerification(profile);
+            this.directAuth$isStartingVerifiedProfile = false;
+            DirectAuth.LOGGER.info("Automatic premium account created for {} with UUID {}", username, targetUuid);
+        }, this.server).exceptionally(error -> {
+            this.server.execute(() -> {
+                if (this.connection.isConnected()) {
+                    DirectAuth.LOGGER.error("Automatic premium registration failed for {}", username, error);
+                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                }
+            });
+            return null;
+        });
+    }
+
+    @Unique
+    private String directAuth$remoteAddress() {
+        if (this.connection.getRemoteAddress() instanceof InetSocketAddress address
+                && address.getAddress() != null) {
+            return address.getAddress().getHostAddress();
+        }
+        return "";
+    }
+
+    @Unique
+    private static boolean directAuth$isMojangVerificationFailure(Component reason) {
+        if (!(reason.getContents() instanceof TranslatableContents translated)) return false;
+
+        return switch (translated.getKey()) {
+            case "multiplayer.disconnect.unverified_username",
+                    "multiplayer.disconnect.authservers_down",
+                    "multiplayer.disconnect.slow_login" -> true;
+            default -> false;
+        };
+    }
+
+    @Invoker("startClientVerification")
+    protected abstract void directAuth$startClientVerification(GameProfile profile);
+
     @Shadow
-    public abstract void handleHello(ServerboundHelloPacket p_10047_);
+    public abstract void handleHello(ServerboundHelloPacket packet);
 }

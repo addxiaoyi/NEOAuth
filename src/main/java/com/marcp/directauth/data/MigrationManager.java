@@ -1,6 +1,7 @@
 package com.marcp.directauth.data;
 
 import com.marcp.directauth.DirectAuth;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -16,15 +17,18 @@ public class MigrationManager {
      * Migra los datos del jugador basándose en la configuración definida en ModConfig.
      */
     public static boolean migratePlayerData(ServerPlayer player, String targetUUIDString) {
+        return migratePlayerData(player.getServer(), player.getStringUUID(), targetUUIDString);
+    }
+
+    public static boolean migratePlayerData(MinecraftServer server, String oldUUID, String targetUUIDString) {
         try {
-            String oldUUID = player.getStringUUID(); // UUID Original (con guiones)
             if (oldUUID.equals(targetUUIDString)) return true;
 
             // Preparamos las variantes sin guiones (necesario para FTB Quests interno)
             String oldUUIDNoDash = oldUUID.replace("-", "");
             String newUUIDNoDash = targetUUIDString.replace("-", "");
 
-            File worldDir = player.getServer().getWorldPath(LevelResource.ROOT).toFile();
+            File worldDir = server.getWorldPath(LevelResource.ROOT).toFile();
             Map<String, MigrationMode> migrationMap = DirectAuth.getConfig().migrationMap;
 
             for (Map.Entry<String, MigrationMode> entry : migrationMap.entrySet()) {
@@ -82,7 +86,7 @@ public class MigrationManager {
             return true;
 
         } catch (Exception e) {
-            DirectAuth.LOGGER.error("CRITICAL ERROR during migration for {}", player.getName().getString(), e);
+            DirectAuth.LOGGER.error("CRITICAL ERROR during migration {} -> {}", oldUUID, targetUUIDString, e);
             return false;
         }
     }
