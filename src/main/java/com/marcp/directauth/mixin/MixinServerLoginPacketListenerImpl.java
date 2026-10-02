@@ -155,7 +155,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         if (this.directAuth$startKnownPremiumFallback()) {
-            DirectAuth.LOGGER.warn("Mojang verification timed out for {}; using password fallback", this.requestedUsername);
+            DirectAuth.LOGGER.warn("Mojang verification timed out for {}; using known-premium automatic fallback", this.requestedUsername);
         }
     }
 
@@ -197,13 +197,15 @@ public abstract class MixinServerLoginPacketListenerImpl {
             if (DirectAuth.getLoginManager() == null) {
                 throw new IllegalStateException("Login manager is not initialized");
             }
-            DirectAuth.getLoginManager().markPremiumPasswordFallback(premiumUuid);
+            // A previously verified premium identity is trusted during a temporary
+            // Mojang outage: keep its UUID and enter without asking for a password.
+            DirectAuth.getLoginManager().markAutomaticPremiumLogin(premiumUuid);
             GameProfile fallbackProfile = this.directAuth$cachedPremiumProfile != null
                     ? this.directAuth$cachedPremiumProfile
                     : new GameProfile(premiumUuid, username);
             this.directAuth$startClientVerification(fallbackProfile);
             DirectAuth.LOGGER.warn(
-                    "Mojang verification failed for known premium player {}; retaining UUID {} for password login",
+                    "Mojang verification failed for known premium player {}; retaining UUID {} for automatic login",
                     username, premiumUuid);
             return true;
         } catch (RuntimeException exception) {

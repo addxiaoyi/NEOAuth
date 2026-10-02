@@ -43,7 +43,7 @@ public class LangConfig {
     public String msgAutoPasswordSetup = "§eYour premium account was created automatically. Set a fallback password with §a/setpassword <password>§e if Mojang is unavailable later.";
     public String msgPremiumAccountCreated = "§a✓ Premium account created automatically. You were logged in without a password.";
     public String errPasswordSetupNotRequired = "§eYour account already has a password. Use §a/changepassword§e to change it.";
-    public String msgPremiumFallbackLogin = "§eMojang could not verify this login. Use §a/login <password>§e to continue; registration is disabled for this account.";
+    public String msgPremiumFallbackLogin = "§eMojang is temporarily unavailable. Your previously verified premium identity was accepted automatically.";
     public String msgPremiumError = "§cAuthentication Error\n§7This account is registered in Online Mode,\n§7but your UUID does not match.\n§7If you own this account, contact an administrator.";
     public String errNotAuthenticated = "§cYou must authenticate first.";
     public String errUserNotFound = "§cError: Account not found.";
@@ -179,7 +179,7 @@ public class LangConfig {
             msgAutoPasswordSetup = "§eTu cuenta original se creó automáticamente. Usa §a/setpassword <contraseña>§e para configurar una contraseña de respaldo si Mojang no está disponible.";
             msgPremiumAccountCreated = "§a✓ Cuenta original creada automáticamente. Has entrado sin contraseña.";
             errPasswordSetupNotRequired = "§eTu cuenta ya tiene una contraseña. Usa §a/changepassword§e para cambiarla.";
-            msgPremiumFallbackLogin = "§eMojang no pudo verificar este acceso. Usa §a/login <contraseña>§e para continuar; el registro está deshabilitado para esta cuenta.";
+            msgPremiumFallbackLogin = "§eMojang no está disponible temporalmente. Tu identidad premium verificada anteriormente fue aceptada automáticamente.";
             msgPremiumError = "§cError de Autenticación\n§7Esta cuenta está en Modo Online,\n§7pero tu UUID no coincide.\n§7Si eres el dueño, contacta a un administrador.";
             errNotAuthenticated = "§cDebes autenticarte primero.";
             errUserNotFound = "§cError: Cuenta no encontrada.";
@@ -253,7 +253,7 @@ public class LangConfig {
         msgAutoPasswordSetup = "§e正版账号已自动创建。建议使用 §a/setpassword <密码>§e 设置备用密码，以便 Mojang 不可用时登录。";
         msgPremiumAccountCreated = "§a✓ 已自动创建正版账号，并免密登录。";
         errPasswordSetupNotRequired = "§e你的账号已经设置密码，请使用 §a/changepassword§e 修改。";
-        msgPremiumFallbackLogin = "§eMojang 暂时无法验证本次登录，请使用 §a/login <密码>§e 继续；该账号不允许重新注册。";
+        msgPremiumFallbackLogin = "§eMojang 暂时不可用，之前验证过的正版身份已自动通过。";
         msgPremiumError = "§c正版验证失败\n§7此账号已绑定正版 UUID，\n§7但本次连接的 UUID 不匹配。\n§7如果这是你的账号，请联系管理员。";
         errNotAuthenticated = "§c请先完成身份验证。";
         errUserNotFound = "§c错误：账号不存在。";
