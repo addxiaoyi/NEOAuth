@@ -72,9 +72,13 @@ public final class MojangAPI {
                 .GET()
                 .build();
         try {
-            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) return null;
-            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            String payload;
+            try (InputStream body = response.body()) {
+                payload = readLimited(body);
+            }
+            JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
             String name = json.has("name") ? json.get("name").getAsString() : fallbackName;
             GameProfile profile = new GameProfile(uuid, name);
             if (!json.has("properties")) return profile;
