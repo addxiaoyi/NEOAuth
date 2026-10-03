@@ -55,7 +55,9 @@ public class DatabaseManager {
                         "onlineUUID TEXT, " +
                         "registrationIp TEXT, " +
                         "texturesValue TEXT, " +
-                        "texturesSignature TEXT" +
+                        "texturesSignature TEXT, " +
+                        "totpSecret TEXT, " +
+                        "totpEnabled INTEGER DEFAULT 0" +
                         ");");
                 
                 // MIGRACIÓN PARA SERVIDORES ANTIGUOS
@@ -64,6 +66,8 @@ public class DatabaseManager {
                 addColumnIfMissing(stmt, "registrationIp", "TEXT");
                 addColumnIfMissing(stmt, "texturesValue", "TEXT");
                 addColumnIfMissing(stmt, "texturesSignature", "TEXT");
+                addColumnIfMissing(stmt, "totpSecret", "TEXT");
+                addColumnIfMissing(stmt, "totpEnabled", "INTEGER DEFAULT 0");
                 stmt.execute("CREATE INDEX IF NOT EXISTS idx_users_online_uuid ON users(onlineUUID);");
             }
         } catch (ClassNotFoundException e) {
@@ -142,6 +146,7 @@ public class DatabaseManager {
                 data.setPremium(rs.getInt("isPremium") == 1);
                 data.setOnlineUUID(rs.getString("onlineUUID"));
                 data.setTextures(rs.getString("texturesValue"), rs.getString("texturesSignature"));
+                data.setTotp(rs.getString("totpSecret"), rs.getInt("totpEnabled") == 1);
                 return data;
             }
         } catch (SQLException e) {
@@ -240,6 +245,7 @@ public class DatabaseManager {
                 data.setPremium(rs.getInt("isPremium") == 1);
                 data.setOnlineUUID(rs.getString("onlineUUID"));
                 data.setTextures(rs.getString("texturesValue"), rs.getString("texturesSignature"));
+                data.setTotp(rs.getString("totpSecret"), rs.getInt("totpEnabled") == 1);
                 return data;
             }
         } catch (SQLException exception) {
@@ -297,14 +303,16 @@ public class DatabaseManager {
     }
 
     public void updateUser(String username, UserData data) {
-        String sql = "UPDATE users SET passwordHash = ?, isPremium = ?, onlineUUID = ?, texturesValue = ?, texturesSignature = ? WHERE username = ?";
+        String sql = "UPDATE users SET passwordHash = ?, isPremium = ?, onlineUUID = ?, texturesValue = ?, texturesSignature = ?, totpSecret = ?, totpEnabled = ? WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, data.getPasswordHash());
             pstmt.setInt(2, data.isPremium() ? 1 : 0);
             pstmt.setString(3, data.getOnlineUUID());
             pstmt.setString(4, data.getTexturesValue());
             pstmt.setString(5, data.getTexturesSignature());
-            pstmt.setString(6, username.toLowerCase());
+            pstmt.setString(6, data.getTotpSecret());
+            pstmt.setInt(7, data.isTotpEnabled() ? 1 : 0);
+            pstmt.setString(8, username.toLowerCase());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             LOGGER.error("NEOauth database operation failed", e);

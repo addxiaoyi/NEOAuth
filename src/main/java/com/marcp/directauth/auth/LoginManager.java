@@ -34,6 +34,7 @@ public class LoginManager {
     private static final long AUTOMATIC_LOGIN_MARKER_TTL_MS = TimeUnit.MINUTES.toMillis(2);
     private final Map<UUID, Long> premiumPasswordFallbacks = new ConcurrentHashMap<>();
     private final Map<UUID, Long> automaticPremiumLogins = new ConcurrentHashMap<>();
+    private final Map<UUID, UserData> pendingTotp = new ConcurrentHashMap<>();
 
     public long getConnectionTime(ServerPlayer player) {
         return connectionTimes.getOrDefault(player.getUUID(), System.currentTimeMillis());
@@ -93,6 +94,7 @@ public class LoginManager {
         });
         premiumPasswordFallbacks.entrySet().removeIf(entry -> now > entry.getValue());
         automaticPremiumLogins.entrySet().removeIf(entry -> now > entry.getValue());
+        pendingTotp.entrySet().removeIf(entry -> !entry.getValue().isTotpEnabled());
         ipAttempts.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
         
         // Opcional: Log de depuración si quieres ver cuándo ocurre (quita esto en producción para evitar spam)
@@ -140,6 +142,18 @@ public class LoginManager {
         return expiresAt != null && expiresAt >= System.currentTimeMillis();
     }
     
+    public void beginTotp(ServerPlayer player, UserData userData) {
+        pendingTotp.put(player.getUUID(), userData);
+    }
+
+    public UserData consumeTotp(ServerPlayer player) {
+        return pendingTotp.remove(player.getUUID());
+    }
+
+    public boolean isAwaitingTotp(ServerPlayer player) {
+        return pendingTotp.containsKey(player.getUUID());
+    }
+
     public void setAuthenticated(ServerPlayer player, boolean authenticated) {
         if (authenticated) {
             authenticatedPlayers.add(player.getUUID());
@@ -157,6 +171,7 @@ public class LoginManager {
         connectionTimes.remove(player.getUUID());
         premiumPasswordFallbacks.remove(player.getUUID());
         automaticPremiumLogins.remove(player.getUUID());
+        pendingTotp.remove(player.getUUID());
         preLoginCache.remove(player.getGameProfile().getName().toLowerCase()); // Limpiar también la caché al desconectar
     }
 

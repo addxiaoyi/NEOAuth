@@ -88,8 +88,18 @@ public class LoginCommand {
             return;
         }
 
-        DirectAuth.getLoginManager().setAuthenticated(player, true);
         DirectAuth.getLoginManager().recordLoginAttempt(player, true);
+        if (DirectAuth.getConfig().totpEnabled && result.userData().isTotpEnabled()) {
+            DirectAuth.getLoginManager().beginTotp(player, result.userData());
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
+            return;
+        }
+        completeAuthenticated(player);
+    }
+
+    public static void completeAuthenticated(ServerPlayer player) {
+        if (!player.connection.isAcceptingMessages()) return;
+        DirectAuth.getLoginManager().setAuthenticated(player, true);
         restorePlayer(player);
         PlayerRestrictionHandler.removeAnchor(player);
         PlayerRestrictionHandler.resyncEffectsToClient(player);

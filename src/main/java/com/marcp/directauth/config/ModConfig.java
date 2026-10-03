@@ -24,6 +24,10 @@ public class ModConfig {
     public int premiumVerificationTimeoutSeconds = 15;
     public int registrationDelay = 1;
     public int maxAccountsPerIP = 0;
+    public String totpIssuer = "NEOauth";
+    public int totpWindowSize = 1;
+    public int totpTimeStepSeconds = 30;
+    public boolean totpEnabled = false;
     public Map<String, MigrationMode> migrationMap = new LinkedHashMap<>();
     private transient LangConfig langConfig;
 

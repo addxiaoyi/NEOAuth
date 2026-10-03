@@ -7,6 +7,8 @@ public class UserData {
     private String onlineUUID; // UUID online si es premium (null si no)
     private String texturesValue;
     private String texturesSignature;
+    private String totpSecret;
+    private boolean totpEnabled;
     
     // Constructor para nuevos usuarios
     public UserData(String username, String passwordHash) {
@@ -23,6 +25,8 @@ public class UserData {
     public String getOnlineUUID() { return onlineUUID; }
     public String getTexturesValue() { return texturesValue; }
     public String getTexturesSignature() { return texturesSignature; }
+    public String getTotpSecret() { return totpSecret; }
+    public boolean isTotpEnabled() { return totpEnabled; }
     
     public void setPasswordHash(String hash) { this.passwordHash = hash; }
     public void setPremium(boolean premium) { this.isPremium = premium; }
@@ -30,5 +34,10 @@ public class UserData {
     public void setTextures(String value, String signature) {
         this.texturesValue = value;
         this.texturesSignature = signature;
+    }
+
+    public void setTotp(String secret, boolean enabled) {
+        this.totpSecret = secret;
+        this.totpEnabled = enabled;
     }
 }
