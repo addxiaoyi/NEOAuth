@@ -5,6 +5,7 @@
   "refmap": "directauth.refmap.json",
   "mixins": [
     "MixinServerLoginPacketListenerImpl",
+    "MixinCommands",
     "MixinLivingEntityEffects",
     "PlayerListAccessor"
   ],
