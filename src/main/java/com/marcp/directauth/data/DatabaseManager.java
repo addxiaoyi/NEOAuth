@@ -89,7 +89,7 @@ public class DatabaseManager {
                 connection.close();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
     }
 
@@ -107,7 +107,7 @@ public class DatabaseManager {
                 return rs.getInt(1);
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
         return 0;
     }
@@ -145,7 +145,7 @@ public class DatabaseManager {
                 return data;
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
         return null;
     }
@@ -158,7 +158,7 @@ public class DatabaseManager {
                 return rs.next();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
         return false;
     }
@@ -292,7 +292,7 @@ public class DatabaseManager {
             pstmt.setString(3, ip);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
     }
 
@@ -307,7 +307,7 @@ public class DatabaseManager {
             pstmt.setString(6, username.toLowerCase());
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.error("NEOauth database operation failed", e);
         }
     }
 
@@ -354,7 +354,7 @@ public class DatabaseManager {
                     connection.commit();
                 } catch (SQLException e) {
                     connection.rollback();
-                    e.printStackTrace();
+                    LOGGER.error("NEOauth database operation failed", e);
                 } finally {
                     connection.setAutoCommit(true);
                 }
@@ -362,10 +362,10 @@ public class DatabaseManager {
             
             // Renombrar el JSON para no volver a importarlo
             Files.move(jsonPath, jsonPath.resolveSibling("DirectAuth_users.json.MIGRATED"));
-            System.out.println("DirectAuth: Migration completed.");
+            LOGGER.info("NEOauth: Legacy JSON migration completed");
             
         } catch (IOException | SQLException e) {
-            System.err.println("DirectAuth: Error migrating JSON: " + e.getMessage());
+            LOGGER.error("NEOauth: Legacy JSON migration failed", e);
         }
     }
 }

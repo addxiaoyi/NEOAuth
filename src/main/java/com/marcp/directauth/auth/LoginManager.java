@@ -25,6 +25,7 @@ public class LoginManager {
     
     // Contador de intentos fallidos (UUID -> contador)
     private final Map<UUID, Integer> failedAttempts = new ConcurrentHashMap<>();
+    private final Map<String, IpAttempt> ipAttempts = new ConcurrentHashMap<>();
 
     // Mapa para guardar el momento exacto de la conexión
     private final Map<UUID, Long> connectionTimes = new ConcurrentHashMap<>();
@@ -92,6 +93,7 @@ public class LoginManager {
         });
         premiumPasswordFallbacks.entrySet().removeIf(entry -> now > entry.getValue());
         automaticPremiumLogins.entrySet().removeIf(entry -> now > entry.getValue());
+        ipAttempts.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
         
         // Opcional: Log de depuración si quieres ver cuándo ocurre (quita esto en producción para evitar spam)
         // com.marcp.directauth.DirectAuth.LOGGER.debug("Limpieza de sesiones completada.");
@@ -221,24 +223,37 @@ public class LoginManager {
     }
     
     public boolean canAttemptLogin(ServerPlayer player) {
+        long now = System.currentTimeMillis();
         UUID uuid = player.getUUID();
         Long lastAttempt = loginAttempts.get(uuid);
-        
-        if (lastAttempt != null) {
-            long elapsed = System.currentTimeMillis() - lastAttempt;
-            return elapsed >= com.marcp.directauth.DirectAuth.getConfig().loginCooldownMs;
+        if (lastAttempt != null
+                && now - lastAttempt < com.marcp.directauth.DirectAuth.getConfig().loginCooldownMs) {
+            return false;
         }
-        return true;
+
+        IpAttempt ipAttempt = ipAttempts.get(normalizeIp(player.getIpAddress()));
+        return ipAttempt == null || !ipAttempt.isBlocked(now);
     }
     
     public void recordLoginAttempt(ServerPlayer player, boolean success) {
         UUID uuid = player.getUUID();
-        loginAttempts.put(uuid, System.currentTimeMillis());
-        
-        if (!success) {
-            int attempts = failedAttempts.getOrDefault(uuid, 0) + 1;
-            failedAttempts.put(uuid, attempts);
+        long now = System.currentTimeMillis();
+        String ip = normalizeIp(player.getIpAddress());
+        loginAttempts.put(uuid, now);
+
+        if (success) {
+            failedAttempts.remove(uuid);
+            ipAttempts.remove(ip);
+            return;
         }
+
+        failedAttempts.merge(uuid, 1, Integer::sum);
+        IpAttempt attempt = ipAttempts.computeIfAbsent(ip, ignored -> new IpAttempt());
+        attempt.recordFailure(now, Math.max(1, com.marcp.directauth.DirectAuth.getConfig().maxLoginAttempts));
+    }
+
+    private static String normalizeIp(String ip) {
+        return ip == null || ip.isBlank() ? "unknown" : ip;
     }
     
     public int getFailedAttempts(ServerPlayer player) {
@@ -279,6 +294,30 @@ public class LoginManager {
         }
     }
     
+    private static final class IpAttempt {
+        private int failures;
+        private long blockedUntil;
+
+        void recordFailure(long now, int maxAttempts) {
+            failures++;
+            if (failures >= maxAttempts * 2) {
+                blockedUntil = now + TimeUnit.HOURS.toMillis(1);
+            } else if (failures >= maxAttempts) {
+                blockedUntil = now + TimeUnit.MINUTES.toMillis(5);
+            } else if (failures >= Math.max(3, maxAttempts / 2)) {
+                blockedUntil = Math.max(blockedUntil, now + TimeUnit.SECONDS.toMillis(30));
+            }
+        }
+
+        boolean isBlocked(long now) {
+            return blockedUntil > now;
+        }
+
+        boolean isExpired(long now) {
+            return failures == 0 || (blockedUntil <= now && now - blockedUntil > TimeUnit.HOURS.toMillis(1));
+        }
+    }
+
     // --- Hashing con PBKDF2 (Nativo Java) ---
     
     public static String generateUnconfiguredPasswordHash() {
