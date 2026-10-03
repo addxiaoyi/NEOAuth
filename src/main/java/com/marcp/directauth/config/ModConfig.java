@@ -27,6 +27,7 @@ public class ModConfig {
     public boolean premiumAutoLogin = true;
     public boolean premiumAutoRegister = true;
     public int premiumVerificationTimeoutSeconds = 15;
+    public boolean offlineSkinByName = true;
     public int registrationDelay = 1;
     public int maxAccountsPerIP = 0;
     public String totpIssuer = "NEOauth";

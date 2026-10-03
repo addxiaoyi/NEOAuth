@@ -2,9 +2,13 @@ package com.marcp.directauth.events;
 
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
+import com.marcp.directauth.auth.MojangAPI;
 import com.marcp.directauth.data.UserData;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -12,6 +16,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import java.nio.file.Path;
+import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -193,6 +198,12 @@ public class ConnectionHandler {
                 isAuthenticated = true;
             }
         }
+
+        if (isAuthenticated && DirectAuth.getConfig().offlineSkinByName
+                && !requiresTotp(userData)
+                && userData != null && !userData.isPremium()) {
+            applyOfflineNameSkin(player);
+        }
         
         // Si NO está autenticado (usuario nuevo o login pendiente), ocultar coordenadas
         if (!isAuthenticated) {
@@ -222,6 +233,33 @@ public class ConnectionHandler {
                 }
             }
         }
+    }
+
+    private void applyOfflineNameSkin(ServerPlayer player) {
+        UUID offlineUuid = UUIDUtil.createOfflinePlayerUUID(player.getGameProfile().getName());
+        if (!offlineUuid.equals(player.getUUID())
+                || !player.getGameProfile().getProperties().get("textures").isEmpty()) return;
+
+        String name = player.getGameProfile().getName();
+        DirectAuth.getDatabase().getUserAsync(name).thenAcceptAsync(user -> {
+            if (user == null || user.isPremium() || !player.connection.isAcceptingMessages()) return;
+            java.util.concurrent.CompletableFuture.supplyAsync(
+                    () -> MojangAPI.getOnlineUUID(name).join())
+                    .thenApplyAsync(uuid -> uuid == null ? null : MojangAPI.fetchSignedProfile(
+                            UUID.fromString(uuid), name))
+                    .thenAcceptAsync(profile -> {
+                        if (profile == null || !player.connection.isAcceptingMessages()) return;
+                        var textures = profile.getProperties().get("textures");
+                        if (textures.isEmpty()) return;
+                        Property texture = textures.iterator().next();
+                        if (!texture.hasSignature()) return;
+                        player.getGameProfile().getProperties().put("textures",
+                                new Property("textures", texture.value(), texture.signature()));
+                        refreshPremiumProfile(player);
+                        DirectAuth.LOGGER.info("Applied name-based offline skin for {} without changing UUID",
+                                name);
+                    }, player.getServer());
+        }, player.getServer());
     }
     
     @SubscribeEvent
