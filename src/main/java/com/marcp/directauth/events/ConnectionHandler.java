@@ -5,6 +5,8 @@ import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.data.UserData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -70,7 +72,27 @@ public class ConnectionHandler {
                     restorePersistentOrProcess(player, userData);
                 }, player.getServer());
             }
+            // Vanilla's offline login can publish the tab-list profile before the
+            // premium property is finalized. Refresh it once the login event runs.
+            player.getServer().execute(() -> player.getServer().execute(() -> refreshPremiumProfile(player)));
         }
+    }
+
+    private void refreshPremiumProfile(ServerPlayer player) {
+        if (!player.connection.isAcceptingMessages()
+                || !DirectAuth.getLoginManager().isAuthenticated(player)
+                || player.getGameProfile().getProperties().get("textures").isEmpty()) {
+            return;
+        }
+
+        var remove = new ClientboundPlayerInfoRemovePacket(java.util.List.of(player.getUUID()));
+        var update = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(java.util.List.of(player));
+        for (ServerPlayer recipient : player.getServer().getPlayerList().getPlayers()) {
+            recipient.connection.send(remove);
+            recipient.connection.send(update);
+        }
+        DirectAuth.LOGGER.info("Refreshed signed skin profile for {} ({})",
+                player.getGameProfile().getName(), player.getUUID());
     }
 
     private void restorePersistentOrProcess(ServerPlayer player, UserData userData) {
