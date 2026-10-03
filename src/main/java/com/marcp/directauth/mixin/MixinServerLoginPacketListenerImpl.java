@@ -247,6 +247,17 @@ public abstract class MixinServerLoginPacketListenerImpl {
         if (!this.directAuth$isStartingVerifiedProfile
                 && profile.getId() != null
                 && profile.getProperties().isEmpty()) {
+            // The session service can be temporarily unavailable. Reuse the last
+            // signed profile before allowing an empty profile to reach the client.
+            if (this.directAuth$cachedPremiumProfile != null
+                    && !this.directAuth$cachedPremiumProfile.getProperties().isEmpty()
+                    && profile.getId().equals(this.directAuth$cachedPremiumProfile.getId())) {
+                ci.cancel();
+                this.directAuth$isStartingVerifiedProfile = true;
+                this.directAuth$startClientVerification(this.directAuth$cachedPremiumProfile);
+                this.directAuth$isStartingVerifiedProfile = false;
+                return;
+            }
             try {
                 ProfileResult refreshed = this.server.getSessionService().fetchProfile(profile.getId(), true);
                 if (refreshed != null && !refreshed.profile().getProperties().isEmpty()) {
