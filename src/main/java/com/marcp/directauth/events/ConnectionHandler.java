@@ -255,6 +255,8 @@ public class ConnectionHandler {
                         if (!texture.hasSignature()) return;
                         player.getGameProfile().getProperties().put("textures",
                                 new Property("textures", texture.value(), texture.signature()));
+                        user.setTextures(texture.value(), texture.signature());
+                        DirectAuth.getDatabase().updateUserAsync(name, user);
                         refreshPremiumProfile(player);
                         DirectAuth.LOGGER.info("Applied name-based offline skin for {} without changing UUID",
                                 name);

@@ -28,6 +28,9 @@ public class ModConfig {
     public boolean premiumAutoRegister = true;
     public int premiumVerificationTimeoutSeconds = 15;
     public boolean offlineSkinByName = true;
+    public String skinNameEndpoint = "https://api.mojang.com/users/profiles/minecraft/{name}";
+    public String skinProfileEndpoint = "https://sessionserver.mojang.com/session/minecraft/profile/{uuid}?unsigned=false";
+    public String skinAllowedHosts = "api.mojang.com,sessionserver.mojang.com";
     public int registrationDelay = 1;
     public int maxAccountsPerIP = 0;
     public String totpIssuer = "NEOauth";

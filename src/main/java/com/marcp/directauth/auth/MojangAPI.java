@@ -1,5 +1,6 @@
 package com.marcp.directauth.auth;
 
+import com.marcp.directauth.DirectAuth;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
@@ -24,7 +25,6 @@ public final class MojangAPI {
             .connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
-    private static final String API_URL = "https://api.mojang.com/users/profiles/minecraft/";
     private static final int MAX_RESPONSE_BYTES = 64 * 1024;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
 
@@ -37,8 +37,10 @@ public final class MojangAPI {
     public static CompletableFuture<String> getOnlineUUID(String username) {
         if (!isValidUsername(username)) return CompletableFuture.completedFuture(null);
 
+        URI uri = configuredUri(DirectAuth.getConfig().skinNameEndpoint, "name", username);
+        if (uri == null) return CompletableFuture.completedFuture(null);
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL + username))
+                .uri(uri)
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .GET()
@@ -64,8 +66,9 @@ public final class MojangAPI {
 
     /** Fetches a signed profile directly, bypassing third-party Authlib host rewrites. */
     public static GameProfile fetchSignedProfile(UUID uuid, String fallbackName) {
-        URI uri = URI.create("https://sessionserver.mojang.com/session/minecraft/profile/"
-                + uuid.toString().replace("-", "") + "?unsigned=false");
+        URI uri = configuredUri(DirectAuth.getConfig().skinProfileEndpoint,
+                "uuid", uuid.toString().replace("-", ""));
+        if (uri == null) return null;
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
@@ -96,6 +99,29 @@ public final class MojangAPI {
             LOGGER.warn("NEOauth: direct signed profile lookup failed for {}", uuid, exception);
             return null;
         }
+    }
+
+    private static URI configuredUri(String template, String placeholder, String value) {
+        if (template == null || template.isBlank()) return null;
+        String encoded = java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        String raw = template.replace("{" + placeholder + "}", encoded);
+        try {
+            URI uri = URI.create(raw);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !isAllowedHost(uri.getHost())) return null;
+            return uri;
+        } catch (IllegalArgumentException exception) {
+            LOGGER.warn("NEOauth: invalid skin endpoint template", exception);
+            return null;
+        }
+    }
+
+    private static boolean isAllowedHost(String host) {
+        if (host == null || DirectAuth.getConfig() == null) return false;
+        for (String allowed : DirectAuth.getConfig().skinAllowedHosts.split(",")) {
+            if (host.equalsIgnoreCase(allowed.trim())) return true;
+        }
+        return false;
     }
 
     private static boolean isValidUsername(String username) {
