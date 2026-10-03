@@ -367,6 +367,11 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
             this.directAuth$isStartingVerifiedProfile = true;
             this.directAuth$loginData = account;
+            // The account is now premium. Let the final verified profile pass through
+            // the normal login path instead of being treated as a second probe.
+            this.directAuth$premiumUuid = profile.getId();
+            this.directAuth$automaticPremiumProbe = false;
+            this.directAuth$automaticPremiumRegistrationStarted = false;
             // Replace the pre-login null marker so PlayerLoggedInEvent sees the complete account.
             if (DirectAuth.getLoginManager() != null) {
                 DirectAuth.getLoginManager().addPreLoadedData(username, account);
