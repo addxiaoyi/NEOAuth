@@ -91,6 +91,9 @@ public class ConnectionHandler {
             recipient.connection.send(remove);
             recipient.connection.send(update);
         }
+        // SkinsRestorer also resends the complete player-info set to the refreshed
+        // player; this fixes the local tab-list/profile cache after a late update.
+        player.getServer().getPlayerList().sendAllPlayerInfo(player);
         DirectAuth.LOGGER.info("Refreshed signed skin profile for {} ({})",
                 player.getGameProfile().getName(), player.getUUID());
     }
