@@ -78,11 +78,13 @@ public class ConnectionHandler {
     private void processLogin(ServerPlayer player, UserData userData) {
         boolean automaticPremiumLogin = DirectAuth.getLoginManager()
                 .consumeAutomaticPremiumLogin(player.getUUID());
+        boolean awaitingTotp = false;
         boolean isAuthenticated = automaticPremiumLogin;
 
         if (automaticPremiumLogin) {
             boolean needsTotp = DirectAuth.getConfig().totpEnabled
                     && userData != null && userData.isTotpEnabled();
+            awaitingTotp = needsTotp;
             if (needsTotp) {
                 DirectAuth.getLoginManager().beginTotp(player, userData);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
@@ -128,7 +130,7 @@ public class ConnectionHandler {
 
         if (!isAuthenticated) {
             // INTENTO DE RESTAURACIÓN DE SESIÓN
-            if (!premiumPasswordFallback && DirectAuth.getLoginManager().tryRestoreSession(player)) {
+            if (!awaitingTotp && !premiumPasswordFallback && DirectAuth.getLoginManager().tryRestoreSession(player)) {
                 DirectAuth.getLoginManager().markAuthenticationMethod(player,
                         com.marcp.directauth.auth.LoginManager.AuthenticationMethod.SESSION);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgSessionRestored));
