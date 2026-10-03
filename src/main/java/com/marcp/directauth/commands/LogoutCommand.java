@@ -17,7 +17,7 @@ public class LogoutCommand {
                 DirectAuth.getLoginManager().setAuthenticated(player, false);
                 
                 // 2. IMPORTANTE: Borrar cualquier sesión pendiente en el mapa graceSessions
-                DirectAuth.getLoginManager().invalidateSession(player); 
+                DirectAuth.getLoginManager().invalidateSession(player);
 
                 // 3. Kickear al jugador (opcional, pero es lo más seguro para que no se quede "bugueado" sin moverse)
                 player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgLogoutSuccess));

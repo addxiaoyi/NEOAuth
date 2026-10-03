@@ -96,7 +96,8 @@ public class LoginCommand {
         }
 
         if (DirectAuth.getConfig().totpEnabled && result.userData().isTotpEnabled()) {
-            DirectAuth.getLoginManager().beginTotp(player, result.userData());
+            DirectAuth.getLoginManager().beginTotp(player, result.userData(),
+                    LoginManager.AuthenticationMethod.PASSWORD);
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
             return;
         }

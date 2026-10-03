@@ -42,13 +42,12 @@ public class ConnectionHandler {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        if (DirectAuth.getDatabase() != null) {
-            DirectAuth.getDatabase().close();
-        }
-        
-        // 2. NUEVO: Detener el Scheduler de sesiones
+        // Stop scheduled database work before closing the shared SQLite connection.
         if (DirectAuth.getLoginManager() != null) {
             DirectAuth.getLoginManager().shutdown();
+        }
+        if (DirectAuth.getDatabase() != null) {
+            DirectAuth.getDatabase().close();
         }
     }
     
@@ -64,14 +63,35 @@ public class ConnectionHandler {
 
             if (cachedData != null || DirectAuth.getLoginManager().isPreLoaded(username)) { 
                 // Si los datos ya estaban en caché (o el marcador de "no existe")
-                processLogin(player, cachedData);
+                restorePersistentOrProcess(player, cachedData);
             } else {
                 // 2. Si no dio tiempo a cargar (raro), hacemos el fallback asíncrono
                 DirectAuth.getDatabase().getUserAsync(username).thenAcceptAsync(userData -> {
-                    processLogin(player, userData);
+                    restorePersistentOrProcess(player, userData);
                 }, player.getServer());
             }
         }
+    }
+
+    private void restorePersistentOrProcess(ServerPlayer player, UserData userData) {
+        DirectAuth.getLoginManager().tryRestorePersistentSession(player, userData).thenAcceptAsync(restored -> {
+            if (!player.connection.isAcceptingMessages()) return;
+            if (restored) {
+                DirectAuth.getLoginManager().setAuthenticated(player, true);
+                DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                        LoginManager.AuthenticationMethod.SESSION);
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgSessionRestored));
+                return;
+            }
+            processLogin(player, userData);
+        }, player.getServer()).exceptionally(error -> {
+            player.getServer().execute(() -> processLogin(player, userData));
+            return null;
+        });
+    }
+
+    private boolean requiresTotp(UserData userData) {
+        return DirectAuth.getConfig().totpEnabled && userData != null && userData.isTotpEnabled();
     }
 
     // Método auxiliar para no duplicar código
@@ -79,18 +99,21 @@ public class ConnectionHandler {
         boolean automaticPremiumLogin = DirectAuth.getLoginManager()
                 .consumeAutomaticPremiumLogin(player.getUUID());
         boolean awaitingTotp = false;
-        boolean isAuthenticated = automaticPremiumLogin;
+        boolean isAuthenticated = false;
 
         if (automaticPremiumLogin) {
-            boolean needsTotp = DirectAuth.getConfig().totpEnabled
-                    && userData != null && userData.isTotpEnabled();
+            boolean needsTotp = requiresTotp(userData);
             awaitingTotp = needsTotp;
             if (needsTotp) {
-                DirectAuth.getLoginManager().beginTotp(player, userData);
+                DirectAuth.getLoginManager().beginTotp(player, userData,
+                        LoginManager.AuthenticationMethod.PREMIUM);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
             } else {
                 DirectAuth.getLoginManager().setAuthenticated(player, true);
+                DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                        LoginManager.AuthenticationMethod.PREMIUM);
+                isAuthenticated = true;
                 boolean passwordNeedsSetup = userData != null
                         && LoginManager.passwordNeedsSetup(userData.getPasswordHash());
                 player.sendSystemMessage(Component.literal(passwordNeedsSetup
@@ -111,13 +134,20 @@ public class ConnectionHandler {
             
             if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)
                     && !premiumPasswordFallback) {
-                DirectAuth.getLoginManager().setAuthenticated(player, true);
-                DirectAuth.getLoginManager().markAuthenticationMethod(player,
-                        premiumPasswordFallback
-                                ? com.marcp.directauth.auth.LoginManager.AuthenticationMethod.PREMIUM_OUTAGE_FALLBACK
-                                : com.marcp.directauth.auth.LoginManager.AuthenticationMethod.PREMIUM);
-                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
-                isAuthenticated = true;
+                boolean needsTotp = requiresTotp(userData);
+                if (needsTotp) {
+                    awaitingTotp = true;
+                    DirectAuth.getLoginManager().beginTotp(player, userData,
+                        LoginManager.AuthenticationMethod.PREMIUM);
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
+                } else {
+                    DirectAuth.getLoginManager().setAuthenticated(player, true);
+                    DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                            LoginManager.AuthenticationMethod.PREMIUM);
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
+                    isAuthenticated = true;
+                }
             } else if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)) {
                 DirectAuth.getLoginManager().invalidateSession(player);
                 DirectAuth.LOGGER.info("Known premium player {} is using password login with UUID {}",
@@ -130,7 +160,8 @@ public class ConnectionHandler {
 
         if (!isAuthenticated) {
             // INTENTO DE RESTAURACIÓN DE SESIÓN
-            if (!awaitingTotp && !premiumPasswordFallback && DirectAuth.getLoginManager().tryRestoreSession(player)) {
+            if (!awaitingTotp && !requiresTotp(userData) && !premiumPasswordFallback
+                    && DirectAuth.getLoginManager().tryRestoreSession(player)) {
                 DirectAuth.getLoginManager().markAuthenticationMethod(player,
                         com.marcp.directauth.auth.LoginManager.AuthenticationMethod.SESSION);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgSessionRestored));

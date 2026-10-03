@@ -1,4 +1,4 @@
-![DirectAuth Logo](src/main/resources/logo.png)
+![NEOauth Logo](src/main/resources/logo.png)
 
 # NEOauth
 
@@ -67,26 +67,24 @@ If your server uses **other** mods that store per-player data (e.g. Curios, Astr
 
 On first launch the following files are generated:
 
-* Config: `world/serverconfig/NEOauth-config.json`
 * Unified config: `config/Neoauth/Neoauth.toml` (contains all settings and English/Chinese/Spanish messages)
 * Database: `world/serverconfig/directauth.db`
 
 ## Configuration
 
-Edit `world/serverconfig/NEOauth-config.json` to customize:
+Edit `config/Neoauth/Neoauth.toml` to customize:
 
 * **Language**: `language` (`"en"`, `"zh"` or `"es"`). The default is `"zh"` (Simplified Chinese), stored in `config/Neoauth/Neoauth.toml`.
 * **Security**: `minPasswordLength`, `maxPasswordLength`, `maxLoginAttempts`, `loginCooldownMs`, `loginTimeout` (seconds before a non-authenticated player is kicked), and `premiumLoginFallbackOnFailure` (allow a known premium account to use its existing password if Mojang verification fails; defaults to `true`). The fallback retains that account's database `onlineUUID`.
 
-  ```json
-  {
-    "premiumLoginFallbackOnFailure": true
-  }
+  ```toml
+  [config]
+  premiumLoginFallbackOnFailure = true
   ```
 
   Set it to `false` to reject known premium accounts whenever Mojang session verification fails. With it enabled, a failed premium handshake does **not** switch to an offline UUID: the database UUID remains the player's UUID and `/login <password>` is still required before playing. `premiumAutoLogin` controls automatic Mojang checks and defaults to `true`. `premiumAutoRegister` defaults to `true` and creates a premium account automatically on the first verified login. The player can then run `/setpassword <password>` once to configure password fallback. `premiumVerificationTimeoutSeconds` defaults to `15`; after that time, a known premium account uses password fallback even if Mojang does not return a classified error.
-* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect; default `600` = 10 minutes) and `sessionCleanupInterval` (minutes between cleanups of expired sessions).
-* **Anti-Bot**: `registrationDelay` (seconds to wait before a fresh player can register) and `maxAccountsPerIP`. `maxAccountsPerIP` defaults to `0`, so registration is not limited by IP unless you set a positive value. `totpEnabled` defaults to `false`; when enabled, players can use `/totp setup`, `/totp verify`, and `/totp disable`.
+* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect; default `600` = 10 minutes), `sessionCleanupInterval` (minutes between cleanups of expired sessions), `sessionPersistence` (default `true`) and `sessionBindToIp` (default `false`).
+* **Anti-Bot**: `registrationDelay` (seconds to wait before a fresh player can register) and `maxAccountsPerIP`. `maxAccountsPerIP` defaults to `0`, so registration is not limited by IP unless you set a positive value. `totpEnabled = false` is the generated default and is intentionally opt-in; when it remains `false`, `/totp` setup/verification is disabled and no player is asked for a TOTP code. When enabled, players can use `/totp setup`, `/totp verify`, and `/totp disable`.
 * **Data Migration**: `migrationMap` — a map of *folder name → migration mode*. To support an extra mod, add its data folder there. Available modes:
     * `RENAME` — rename a single file that is named after the UUID (most vanilla data, SkinRestorer).
     * `DIRECTORY` — move/rename a whole folder named after the UUID (e.g. graves).
@@ -113,7 +111,7 @@ Message strings can be edited in the `NEOauth-lang-*.json` files.
 A: You aren't authenticated yet. Use `/register <password>` (first time) or `/login <password>`.
 
 **Q: I lost my items from [some mod] after automatic premium detection.**
-A: The server administrator likely hadn't added that mod's data folder to `migrationMap` before automatic migration. Contact your admin and restore the backup created by DirectAuth if necessary.
+A: The server administrator likely hadn't added that mod's data folder to `migrationMap` before automatic migration. Contact your admin and restore the backup created by NEOauth if necessary.
 
 ## Technical Details
 

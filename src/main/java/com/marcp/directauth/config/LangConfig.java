@@ -23,7 +23,7 @@ public class LangConfig {
     public String errPasswordTooShort = "§cPassword must be at least 4 characters long.";
     public String errPasswordTooLong = "§cPassword cannot be longer than 32 characters.";
     public String msgRegistered = "§a✓ Account registered successfully.";
-    public String msgPremiumEnableHint = "§7If you are using a legitimate Minecraft account, DirectAuth will verify it automatically on your next login.";
+    public String msgPremiumEnableHint = "§7If you are using a legitimate Minecraft account, NEOauth will verify it automatically on your next login.";
     public String errRegistrationCooldown = "§cPlease wait a moment before registering.";
     public String errIpLimitReached = "§cRegistration limit reached for this IP address.";
     public String errStorageUnavailable = "§cAuthentication storage is temporarily unavailable. Please try again.";
@@ -65,7 +65,7 @@ public class LangConfig {
     public String msgPremiumSuccess = "§a✓ Account verified as Online Mode.";
     public String msgPremiumKick = "§aAccount verified!\n§ePlease rejoin to apply changes.";
     public String msgAutoLoginHint = "§7Auto-login is now enabled for this account.";
-    public String msgOnlineModeWarning = "§6WARNING! §eEnabling Online Mode will migrate your player data (e.g., inventory, stats, advancements). While DirectAuth tries to migrate data from other mods, there is a small risk of losing mod-specific data if not configured correctly. Please ensure your server owner has configured all mod data folders in directauth-config.json before proceeding, or make a backup.";
+    public String msgOnlineModeWarning = "§6WARNING! §eEnabling Online Mode will migrate your player data (e.g., inventory, stats, advancements). While NEOauth tries to migrate data from other mods, there is a small risk of losing mod-specific data if not configured correctly. Please ensure your server owner has configured all mod data folders in config/Neoauth/Neoauth.toml before proceeding, or make a backup.";
 
     // --- Admin Messages ---
     public String msgPremiumWarning = "§cWARNING! §7You are about to enable Online Mode.\n§7If you do not own this account, §cyou will lose access.\n§7Type §b/online <your_password> §7to confirm.";
@@ -74,8 +74,8 @@ public class LangConfig {
     public String errAdminUsage = "§cUsage: /directauth online <user> <true|false>";
     public String errAdminUsageReset = "§cUsage: /directauth resetpass <user> <newPassword>";
     public String errAdminUsageUnregister = "§cUsage: /directauth unregister <user>";
-    public String msgConfigReloaded = "§a✓ DirectAuth configuration reloaded.";
-    public String msgLangReset = "§a✓ DirectAuth built-in (English/Chinese/Spanish) language files reset to defaults.";
+    public String msgConfigReloaded = "§a✓ NEOauth configuration reloaded.";
+    public String msgLangReset = "§a✓ NEOauth built-in (English/Chinese/Spanish) language files reset to defaults.";
 
     // --- Restriction Messages ---
     public String msgNoDrop = "§cYou cannot drop items before authenticating.";
@@ -109,7 +109,7 @@ public class LangConfig {
             return String.format(template, args);
         } catch (java.util.IllegalFormatException e) {
             com.marcp.directauth.DirectAuth.LOGGER.warn(
-                "DirectAuth: malformed format string in language file: {}", template);
+                "NEOauth: malformed format string in language file: {}", template);
             return template;
         }
     }
@@ -135,7 +135,7 @@ public class LangConfig {
                 config.save(langPath); // persist any newly added keys
                 return config;
             } catch (Exception e) {
-                System.err.println("DirectAuth: Error loading lang config: " + e.getMessage());
+                System.err.println("NEOauth: Error loading lang config: " + e.getMessage());
                 LangConfig config = new LangConfig();
                 config.setDefaults(language);
                 return config;
@@ -210,7 +210,7 @@ public class LangConfig {
             msgPremiumSuccess = "§a✓ Cuenta verificada como Modo Online.";
             msgPremiumKick = "§a¡Cuenta verificada!\n§ePor favor, vuelve a entrar para aplicar los cambios.";
             msgAutoLoginHint = "§7El auto-login está activado para esta cuenta.";
-            msgOnlineModeWarning = "§6¡ADVERTENCIA! §eActivar el Modo Online migrará tus datos de jugador (ej. inventario, estadísticas, avances). Aunque DirectAuth intenta migrar datos de otros mods, existe un pequeño riesgo de perder datos específicos de mods si no se configura correctamente. Asegúrate de que el dueño de tu servidor haya configurado todas las carpetas de datos de mods en directauth-config.json antes de continuar, o haz una copia de seguridad.";
+            msgOnlineModeWarning = "§6¡ADVERTENCIA! §eActivar el Modo Online migrará tus datos de jugador (ej. inventario, estadísticas, avances). Aunque DirectAuth intenta migrar datos de otros mods, existe un pequeño riesgo de perder datos específicos de mods si no se configura correctamente. Asegúrate de que el dueño de tu servidor haya configurado todas las carpetas de datos de mods en config/Neoauth/Neoauth.toml antes de continuar, o haz una copia de seguridad.";
 
             // --- Admin Messages ---
             msgPremiumWarning = "§c¡ADVERTENCIA! §7Estás a punto de activar el Modo Online.\n§7Si no eres dueño de esta cuenta, §cperderás el acceso.\n§7Escribe §b/online <tu_contraseña> §7para confirmar.";

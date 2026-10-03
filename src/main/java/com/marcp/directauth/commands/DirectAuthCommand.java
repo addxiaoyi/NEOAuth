@@ -132,8 +132,11 @@ public class DirectAuthCommand {
         }
 
         userData.setPremium(newValue);
-        if (!newValue) userData.setOnlineUUID(null); // Limpiar UUID si se desactiva
-        
+        if (!newValue) {
+            userData.setOnlineUUID(null);
+            DirectAuth.getLoginManager().invalidateStoredSessions(userData);
+        }
+
         DirectAuth.getDatabase().updateUser(username, userData);
         context.getSource().sendSuccess(() -> Component.literal(
             LangConfig.format(DirectAuth.getConfig().getLang().msgAdminPremiumUpdated, username, newValue)
@@ -152,6 +155,7 @@ public class DirectAuthCommand {
         }
 
         userData.setPasswordHash(LoginManager.hashPassword(newPass));
+        DirectAuth.getLoginManager().invalidateStoredSessions(userData);
         DirectAuth.getDatabase().updateUser(username, userData);
         
         context.getSource().sendSuccess(() -> Component.literal(
@@ -168,6 +172,8 @@ public class DirectAuthCommand {
             return 0;
         }
 
+        UserData userData = DirectAuth.getDatabase().getUser(username);
+        DirectAuth.getLoginManager().invalidateStoredSessions(userData);
         DirectAuth.getDatabase().deleteUser(username);
         
         // Si el jugador está online, lo echamos

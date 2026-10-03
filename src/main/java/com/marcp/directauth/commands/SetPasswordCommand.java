@@ -57,6 +57,7 @@ public final class SetPasswordCommand {
                         player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errPasswordSetupNotRequired));
                         return;
                     }
+                    DirectAuth.getLoginManager().invalidateSession(player);
                     DirectAuth.getDatabase().updateUserAsync(username, result.userData());
                     player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPasswordChanged));
                 }, player.getServer());

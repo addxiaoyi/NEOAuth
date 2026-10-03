@@ -53,8 +53,8 @@ public class ChangePasswordCommand {
                                         UserData updated = result.userData();
                                         if (updated == null || !player.connection.isAcceptingMessages()) return;
                                         updated.setPasswordHash(newHash);
-                                        updated.setPremium(false);
-                                        updated.setOnlineUUID(null);
+                                        // Changing the fallback password must not unlink a verified premium identity.
+                                        DirectAuth.getLoginManager().invalidateSession(player);
                                         DirectAuth.getDatabase().updateUserAsync(username, updated);
                                         player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgPasswordChanged));
                                     }, player.getServer()));

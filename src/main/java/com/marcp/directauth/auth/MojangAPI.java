@@ -2,56 +2,89 @@ package com.marcp.directauth.auth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
-public class MojangAPI {
-    private static final HttpClient client = HttpClient.newHttpClient();
+public final class MojangAPI {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final HttpClient CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .build();
     private static final String API_URL = "https://api.mojang.com/users/profiles/minecraft/";
-    
+    private static final int MAX_RESPONSE_BYTES = 64 * 1024;
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
+
+    private MojangAPI() {}
+
     /**
-     * Obtiene el UUID online de un jugador de forma asíncrona
-     * @param username Nombre del jugador
-     * @return CompletableFuture con el UUID (sin guiones) o null si no existe
+     * Looks up a username through Mojang's public profile endpoint.
+     * A null result means the name is invalid, unknown, or the service was unavailable.
      */
     public static CompletableFuture<String> getOnlineUUID(String username) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(API_URL + username))
-                    .GET()
-                    .build();
-                
-                HttpResponse<String> response = client.send(request, 
-                    HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() == 200) {
-                    JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-                    return json.get("id").getAsString(); // UUID sin guiones
-                } else if (response.statusCode() == 204 || response.statusCode() == 404) {
-                    return null; // Usuario no existe
-                }
-            } catch (Exception e) {
-                System.err.println("DirectAuth: Error querying Mojang API: " + e.getMessage());
-            }
-            return null;
-        });
+        if (!isValidUsername(username)) return CompletableFuture.completedFuture(null);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL + username))
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
+                .thenApply(response -> {
+                    try (InputStream body = response.body()) {
+                        if (response.statusCode() != 200) return null;
+                        String payload = readLimited(body);
+                        JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
+                        return json.has("id") ? formatUUID(json.get("id").getAsString()) : null;
+                    } catch (Exception exception) {
+                        LOGGER.warn("NEOauth: Mojang profile response could not be parsed for {}", username, exception);
+                        return null;
+                    }
+                })
+                .exceptionally(exception -> {
+                    LOGGER.warn("NEOauth: Mojang profile lookup failed for {}", username, exception);
+                    return null;
+                });
     }
-    
-    /**
-     * Formatea UUID sin guiones a formato con guiones
-     */
-    public static String formatUUID(String uuidWithoutDashes) {
-        if (uuidWithoutDashes == null || uuidWithoutDashes.length() != 32) {
-            return null;
+
+    private static boolean isValidUsername(String username) {
+        return username != null && username.matches("[A-Za-z0-9_]{3,16}");
+    }
+
+    private static String readLimited(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > MAX_RESPONSE_BYTES) {
+                throw new IOException("Mojang response exceeded the size limit");
+            }
+            output.write(buffer, 0, read);
         }
-        return uuidWithoutDashes.substring(0, 8) + "-" +
-               uuidWithoutDashes.substring(8, 12) + "-" +
-               uuidWithoutDashes.substring(12, 16) + "-" +
-               uuidWithoutDashes.substring(16, 20) + "-" +
-               uuidWithoutDashes.substring(20);
+        return output.toString(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /** Formats a UUID without dashes into the canonical representation. */
+    public static String formatUUID(String uuidWithoutDashes) {
+        if (uuidWithoutDashes == null || !uuidWithoutDashes.matches("[0-9a-fA-F]{32}")) return null;
+        return uuidWithoutDashes.substring(0, 8) + "-"
+                + uuidWithoutDashes.substring(8, 12) + "-"
+                + uuidWithoutDashes.substring(12, 16) + "-"
+                + uuidWithoutDashes.substring(16, 20) + "-"
+                + uuidWithoutDashes.substring(20);
     }
 }

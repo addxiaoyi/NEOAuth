@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.util.Map;
+import java.util.Collection;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -48,6 +49,12 @@ public class DatabaseManager {
             
             try (Statement stmt = connection.createStatement()) {
                 // Creamos la tabla si no existe
+                stmt.execute("CREATE TABLE IF NOT EXISTS sessions (" +
+                        "playerUuid TEXT PRIMARY KEY, " +
+                        "username TEXT, " +
+                        "expiresAt INTEGER NOT NULL, " +
+                        "ipAddress TEXT" +
+                        ");");
                 stmt.execute("CREATE TABLE IF NOT EXISTS users (" +
                         "username TEXT PRIMARY KEY, " +
                         "passwordHash TEXT NOT NULL, " +
@@ -66,6 +73,7 @@ public class DatabaseManager {
                 // Si la columna ya existe, SQLite lanzará un error que ignoraremos de forma segura.
                 addColumnIfMissing(stmt, "registrationIp", "TEXT");
                 addColumnIfMissing(stmt, "texturesValue", "TEXT");
+                addColumnIfMissing(stmt, "sessions", "username", "TEXT");
                 addColumnIfMissing(stmt, "texturesSignature", "TEXT");
                 addColumnIfMissing(stmt, "totpSecret", "TEXT");
                 addColumnIfMissing(stmt, "totpEnabled", "INTEGER DEFAULT 0");
@@ -80,22 +88,145 @@ public class DatabaseManager {
     }
 
     private void addColumnIfMissing(Statement statement, String name, String type) throws SQLException {
+        addColumnIfMissing(statement, "users", name, type);
+    }
+
+    private void addColumnIfMissing(Statement statement, String table, String name, String type) throws SQLException {
         try {
-            statement.execute("ALTER TABLE users ADD COLUMN " + name + " " + type + ";");
-            LOGGER.info("NEOauth: Database column added: {}", name);
+            statement.execute("ALTER TABLE " + table + " ADD COLUMN " + name + " " + type + ";");
+            LOGGER.info("NEOauth: Database column added: {}.{}", table, name);
         } catch (SQLException exception) {
-            if (!exception.getMessage().toLowerCase().contains("duplicate column")) throw exception;
+            String message = exception.getMessage();
+            if (message == null || !message.toLowerCase().contains("duplicate column")) throw exception;
         }
     }
 
     public void close() {
         dbExecutor.shutdown();
         try {
+            if (!dbExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                dbExecutor.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            dbExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();
             }
-        } catch (SQLException e) {
-            LOGGER.error("NEOauth database operation failed", e);
+        } catch (SQLException exception) {
+            LOGGER.error("NEOauth database operation failed while closing", exception);
+        }
+    }
+
+    public CompletableFuture<Boolean> createSessionAsync(String uuid, long expiresAt, String ipAddress) {
+        return createSessionAsync(null, uuid, expiresAt, ipAddress);
+    }
+
+    public CompletableFuture<Boolean> createSessionAsync(String username, String uuid, long expiresAt, String ipAddress) {
+        return CompletableFuture.supplyAsync(
+                () -> createSession(username, uuid, expiresAt, ipAddress), dbExecutor);
+    }
+
+    private synchronized boolean createSession(String username, String uuid, long expiresAt, String ipAddress) {
+        String sql = "INSERT INTO sessions(playerUuid, username, expiresAt, ipAddress) VALUES(?,?,?,?) "
+                + "ON CONFLICT(playerUuid) DO UPDATE SET username=excluded.username, "
+                + "expiresAt=excluded.expiresAt, ipAddress=excluded.ipAddress";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, uuid);
+            statement.setString(2, username);
+            statement.setLong(3, expiresAt);
+            statement.setString(4, ipAddress);
+            statement.executeUpdate();
+            return true;
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to create session for " + uuid, exception);
+        }
+    }
+
+    public CompletableFuture<Boolean> hasValidSessionAsync(String uuid, String ipAddress, boolean bindToIp) {
+        return CompletableFuture.supplyAsync(
+                () -> hasValidSession(uuid, ipAddress, bindToIp), dbExecutor);
+    }
+
+    private synchronized boolean hasValidSession(String uuid, String ipAddress, boolean bindToIp) {
+        String sql = "SELECT expiresAt, ipAddress FROM sessions WHERE playerUuid = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, uuid);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) return false;
+                long expiresAt = result.getLong("expiresAt");
+                String storedIp = result.getString("ipAddress");
+                boolean valid = expiresAt > System.currentTimeMillis()
+                        && (!bindToIp || java.util.Objects.equals(storedIp, ipAddress));
+                if (!valid) deleteSession(uuid);
+                return valid;
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to validate session for " + uuid, exception);
+        }
+    }
+
+    public CompletableFuture<Boolean> deleteSessionAsync(String uuid) {
+        return CompletableFuture.supplyAsync(() -> deleteSession(uuid), dbExecutor);
+    }
+
+    public CompletableFuture<Integer> deleteExpiredSessionsAsync(long now) {
+        return CompletableFuture.supplyAsync(() -> deleteExpiredSessions(now), dbExecutor);
+    }
+
+    private synchronized int deleteExpiredSessions(long now) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM sessions WHERE expiresAt <= ?")) {
+            statement.setLong(1, now);
+            return statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to remove expired sessions", exception);
+        }
+    }
+
+    public CompletableFuture<Integer> deleteSessionsByUsernameAsync(String username) {
+        if (username == null || username.isBlank()) return CompletableFuture.completedFuture(0);
+        return CompletableFuture.supplyAsync(() -> deleteSessionsByUsername(username), dbExecutor);
+    }
+
+    private synchronized int deleteSessionsByUsername(String username) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM sessions WHERE username = ? COLLATE NOCASE")) {
+            statement.setString(1, username);
+            return statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to remove sessions for " + username, exception);
+        }
+    }
+
+    public CompletableFuture<Integer> deleteSessionsAsync(Collection<String> uuids) {
+        if (uuids == null || uuids.isEmpty()) return CompletableFuture.completedFuture(0);
+        return CompletableFuture.supplyAsync(() -> deleteSessions(uuids), dbExecutor);
+    }
+
+    private synchronized int deleteSessions(Collection<String> uuids) {
+        int deleted = 0;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM sessions WHERE playerUuid = ?")) {
+            for (String uuid : uuids) {
+                if (uuid == null || uuid.isBlank()) continue;
+                statement.setString(1, uuid);
+                deleted += statement.executeUpdate();
+            }
+            return deleted;
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to remove stored sessions", exception);
+        }
+    }
+
+    private synchronized boolean deleteSession(String uuid) {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM sessions WHERE playerUuid = ?")) {
+            statement.setString(1, uuid);
+            return statement.executeUpdate() > 0;
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to delete session for " + uuid, exception);
         }
     }
 
@@ -103,7 +234,7 @@ public class DatabaseManager {
         return CompletableFuture.supplyAsync(() -> countAccountsByIP(ip), dbExecutor);
     }
 
-    public int countAccountsByIP(String ip) {
+    public synchronized int countAccountsByIP(String ip) {
         if (ip == null) return 0;
         String sql = "SELECT COUNT(*) FROM users WHERE registrationIp = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -137,7 +268,7 @@ public class DatabaseManager {
         return CompletableFuture.supplyAsync(() -> createUserIfAbsent(username, passwordHash, ip), dbExecutor);
     }
 
-    public UserData getUser(String username) {
+    public synchronized UserData getUser(String username) {
         String sql = "SELECT * FROM users WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());
@@ -158,7 +289,7 @@ public class DatabaseManager {
         return null;
     }
 
-    public boolean userExists(String username) {
+    public synchronized boolean userExists(String username) {
         String sql = "SELECT 1 FROM users WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());
@@ -178,7 +309,7 @@ public class DatabaseManager {
                 username, passwordHash, ip, onlineUuid, texturesValue, texturesSignature), dbExecutor);
     }
 
-    private UserData upsertPremiumIdentity(String username, String passwordHash, String ip, String onlineUuid,
+    private synchronized UserData upsertPremiumIdentity(String username, String passwordHash, String ip, String onlineUuid,
                                            String texturesValue, String texturesSignature) {
         String normalizedName = username.toLowerCase();
         try {
@@ -239,7 +370,7 @@ public class DatabaseManager {
         }
     }
 
-    private UserData getUserByOnlineUuid(String onlineUuid) {
+    private synchronized UserData getUserByOnlineUuid(String onlineUuid) {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE onlineUUID = ? LIMIT 1")) {
             statement.setString(1, onlineUuid);
             try (ResultSet rs = statement.executeQuery()) {
@@ -264,7 +395,7 @@ public class DatabaseManager {
                 () -> createPremiumUserIfAbsent(username, passwordHash, ip, onlineUuid, texturesValue, texturesSignature), dbExecutor);
     }
 
-    private boolean createPremiumUserIfAbsent(String username, String passwordHash, String ip, String onlineUuid,
+    private synchronized boolean createPremiumUserIfAbsent(String username, String passwordHash, String ip, String onlineUuid,
                                               String texturesValue, String texturesSignature) {
         String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp, texturesValue, texturesSignature) "
                 + "VALUES(?,?,1,?,?,?,?) ON CONFLICT(username) DO NOTHING";
@@ -281,7 +412,7 @@ public class DatabaseManager {
         }
     }
 
-    private boolean createUserIfAbsent(String username, String passwordHash, String ip) {
+    private synchronized boolean createUserIfAbsent(String username, String passwordHash, String ip) {
         String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) "
                 + "VALUES(?,?,0,NULL,?) ON CONFLICT(username) DO NOTHING";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -294,7 +425,7 @@ public class DatabaseManager {
         }
     }
 
-    public void createUser(String username, String passwordHash, String ip) {
+    public synchronized void createUser(String username, String passwordHash, String ip) {
         String sql = "INSERT INTO users(username, passwordHash, isPremium, onlineUUID, registrationIp) VALUES(?,?,0,NULL,?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());
@@ -306,7 +437,7 @@ public class DatabaseManager {
         }
     }
 
-    public void updateUser(String username, UserData data) {
+    public synchronized void updateUser(String username, UserData data) {
         String sql = "UPDATE users SET passwordHash = ?, isPremium = ?, onlineUUID = ?, texturesValue = ?, texturesSignature = ?, totpSecret = ?, totpEnabled = ?, totpRecoveryCodes = ? WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, data.getPasswordHash());
@@ -328,7 +459,7 @@ public class DatabaseManager {
         return CompletableFuture.supplyAsync(() -> deleteUserReliable(username), dbExecutor);
     }
 
-    private boolean deleteUserReliable(String username) {
+    private synchronized boolean deleteUserReliable(String username) {
         String sql = "DELETE FROM users WHERE username = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, username.toLowerCase());

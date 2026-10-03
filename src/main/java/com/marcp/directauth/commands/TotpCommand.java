@@ -91,6 +91,9 @@ public final class TotpCommand {
             }
             if (DirectAuth.getLoginManager().isAwaitingTotp(player)) {
                 DirectAuth.getLoginManager().consumeTotp(player);
+                LoginManager.AuthenticationMethod method = DirectAuth.getLoginManager().consumeTotpMethod(player);
+                DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                        method == null ? LoginManager.AuthenticationMethod.PASSWORD : method);
                 LoginCommand.completeAuthenticated(player);
                 return;
             }

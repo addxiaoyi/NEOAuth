@@ -307,12 +307,19 @@ public abstract class MixinServerLoginPacketListenerImpl {
     @Unique
     private void directAuth$cacheTextures(GameProfile profile) {
         if (this.directAuth$loginData == null) return;
-        var properties = profile.getProperties().get("textures");
-        if (properties == null || properties.isEmpty()) return;
-        Property textures = properties.iterator().next();
-        if (textures.hasSignature()) {
-            this.directAuth$loginData.setTextures(textures.value(), textures.signature());
+        String[] textures = directAuth$texturePair(profile);
+        if (textures != null) {
+            this.directAuth$loginData.setTextures(textures[0], textures[1]);
         }
+    }
+
+    @Unique
+    private static String[] directAuth$texturePair(GameProfile profile) {
+        var properties = profile.getProperties().get("textures");
+        if (properties == null || properties.isEmpty()) return null;
+        Property textures = properties.iterator().next();
+        if (!textures.hasSignature()) return null;
+        return new String[] {textures.value(), textures.signature()};
     }
 
     @Unique
@@ -340,8 +347,13 @@ public abstract class MixinServerLoginPacketListenerImpl {
             if (!migrated) return CompletableFuture.<UserData>completedFuture(null);
             String ip = this.directAuth$remoteAddress();
             String passwordHash = LoginManager.generateUnconfiguredPasswordHash();
-            String texturesValue = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesValue();
-            String texturesSignature = this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesSignature();
+            String[] profileTextures = directAuth$texturePair(profile);
+            String texturesValue = profileTextures != null
+                    ? profileTextures[0]
+                    : this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesValue();
+            String texturesSignature = profileTextures != null
+                    ? profileTextures[1]
+                    : this.directAuth$loginData == null ? null : this.directAuth$loginData.getTexturesSignature();
             return DirectAuth.getDatabase().upsertPremiumIdentityAsync(
                     username, passwordHash, ip, targetUuid, texturesValue, texturesSignature);
         }).thenAcceptAsync(account -> {
@@ -354,7 +366,9 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
             this.directAuth$isStartingVerifiedProfile = true;
             this.directAuth$loginData = account;
+            // Replace the pre-login null marker so PlayerLoggedInEvent sees the complete account.
             if (DirectAuth.getLoginManager() != null) {
+                DirectAuth.getLoginManager().addPreLoadedData(username, account);
                 DirectAuth.getLoginManager().markAutomaticPremiumLogin(profile.getId());
             }
             this.directAuth$startClientVerification(profile);

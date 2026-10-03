@@ -10,9 +10,13 @@ import java.util.Map;
 import com.google.gson.JsonObject;
 
 public class ModConfig {
+    private static final boolean DEFAULT_TOTP_ENABLED = false;
+
     public String language = "zh";
     public int sessionGracePeriod = 600;
     public int sessionCleanupInterval = 10;
+    public boolean sessionPersistence = true;
+    public boolean sessionBindToIp = false;
     public int minPasswordLength = 4;
     public int maxPasswordLength = 32;
     public int maxLoginAttempts = 5;
@@ -27,7 +31,7 @@ public class ModConfig {
     public String totpIssuer = "NEOauth";
     public int totpWindowSize = 1;
     public int totpTimeStepSeconds = 30;
-    public boolean totpEnabled = false;
+    public boolean totpEnabled = DEFAULT_TOTP_ENABLED;
     public Map<String, MigrationMode> migrationMap = new LinkedHashMap<>();
     private transient LangConfig langConfig;
 
@@ -68,6 +72,7 @@ public class ModConfig {
             }
         }
 
+        config.normalize();
         LangConfig english = language(document, "en");
         LangConfig chinese = language(document, "zh");
         LangConfig spanish = language(document, "es");
@@ -92,6 +97,26 @@ public class ModConfig {
         output.putSection("messages.es", spanish);
         output.write(configPath);
         return config;
+    }
+
+    private void normalize() {
+        if (language == null || language.isBlank()) language = "zh";
+        sessionGracePeriod = Math.max(0, sessionGracePeriod);
+        sessionCleanupInterval = Math.max(1, sessionCleanupInterval);
+        minPasswordLength = Math.max(1, minPasswordLength);
+        maxPasswordLength = Math.max(minPasswordLength, maxPasswordLength);
+        maxLoginAttempts = Math.max(1, maxLoginAttempts);
+        loginCooldownMs = Math.max(0, loginCooldownMs);
+        loginTimeout = Math.max(1, loginTimeout);
+        premiumVerificationTimeoutSeconds = Math.max(1, premiumVerificationTimeoutSeconds);
+        registrationDelay = Math.max(0, registrationDelay);
+        maxAccountsPerIP = Math.max(0, maxAccountsPerIP);
+        totpWindowSize = Math.max(0, Math.min(5, totpWindowSize));
+        totpTimeStepSeconds = Math.max(10, Math.min(300, totpTimeStepSeconds));
+        if (migrationMap == null) {
+            migrationMap = new LinkedHashMap<>();
+            setDefaults();
+        }
     }
 
     private static LangConfig language(NeoauthToml document, String code) {

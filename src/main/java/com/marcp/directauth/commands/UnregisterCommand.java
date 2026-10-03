@@ -39,6 +39,7 @@ public class UnregisterCommand {
                             DirectAuth.getDatabase().deleteUserAsync(username)
                                     .thenAcceptAsync(deleted -> {
                                         if (!deleted || !player.connection.isAcceptingMessages()) return;
+                                        DirectAuth.getLoginManager().invalidateStoredSessions(result.userData());
                                         DirectAuth.getLoginManager().removePlayer(player);
                                         player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgAccountDeleted));
                                     }, player.getServer()));

@@ -1,5 +1,7 @@
 package com.marcp.directauth.auth;
 
+import com.marcp.directauth.DirectAuth;
+
 import net.minecraft.server.level.ServerPlayer;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
@@ -38,6 +40,7 @@ public class LoginManager {
     private final Map<UUID, Long> premiumPasswordFallbacks = new ConcurrentHashMap<>();
     private final Map<UUID, Long> automaticPremiumLogins = new ConcurrentHashMap<>();
     private final Map<UUID, UserData> pendingTotp = new ConcurrentHashMap<>();
+    private final Map<UUID, AuthenticationMethod> pendingTotpMethods = new ConcurrentHashMap<>();
 
     public long getConnectionTime(ServerPlayer player) {
         return connectionTimes.getOrDefault(player.getUUID(), System.currentTimeMillis());
@@ -103,7 +106,13 @@ public class LoginManager {
         premiumPasswordFallbacks.entrySet().removeIf(entry -> now > entry.getValue());
         automaticPremiumLogins.entrySet().removeIf(entry -> now > entry.getValue());
         pendingTotp.entrySet().removeIf(entry -> !entry.getValue().isTotpEnabled());
+        pendingTotpMethods.keySet().removeIf(uuid -> !pendingTotp.containsKey(uuid));
         ipAttempts.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
+        if (DirectAuth.getConfig() != null
+                && DirectAuth.getConfig().sessionPersistence
+                && DirectAuth.getDatabase() != null) {
+            DirectAuth.getDatabase().deleteExpiredSessionsAsync(now);
+        }
         
         // Opcional: Log de depuración si quieres ver cuándo ocurre (quita esto en producción para evitar spam)
         // com.marcp.directauth.DirectAuth.LOGGER.debug("Limpieza de sesiones completada.");
@@ -140,6 +149,17 @@ public class LoginManager {
         return expiresAt != null && expiresAt >= System.currentTimeMillis();
     }
 
+    public boolean hasPendingPremiumPasswordFallback(UUID premiumUuid) {
+        return isLiveMarker(premiumPasswordFallbacks.get(premiumUuid));
+    }
+
+    public boolean hasPendingAutomaticPremiumLogin(UUID premiumUuid) {
+        return isLiveMarker(automaticPremiumLogins.get(premiumUuid));
+    }
+
+    private static boolean isLiveMarker(Long expiresAt) {
+        return expiresAt != null && expiresAt >= System.currentTimeMillis();
+    }
 
     public void markAutomaticPremiumLogin(UUID premiumUuid) {
         automaticPremiumLogins.put(premiumUuid, System.currentTimeMillis() + AUTOMATIC_LOGIN_MARKER_TTL_MS);
@@ -151,11 +171,21 @@ public class LoginManager {
     }
     
     public void beginTotp(ServerPlayer player, UserData userData) {
+        beginTotp(player, userData, AuthenticationMethod.PASSWORD);
+    }
+
+    public void beginTotp(ServerPlayer player, UserData userData, AuthenticationMethod method) {
         pendingTotp.put(player.getUUID(), userData);
+        pendingTotpMethods.put(player.getUUID(), method);
+        markAuthenticationMethod(player, AuthenticationMethod.TOTP_PENDING);
     }
 
     public UserData consumeTotp(ServerPlayer player) {
         return pendingTotp.remove(player.getUUID());
+    }
+
+    public AuthenticationMethod consumeTotpMethod(ServerPlayer player) {
+        return pendingTotpMethods.remove(player.getUUID());
     }
 
     public boolean isAwaitingTotp(ServerPlayer player) {
@@ -207,14 +237,34 @@ public class LoginManager {
         if (durationSeconds <= 0) return; // Si está desactivado (0), no guardamos nada
 
         long expiryTime = System.currentTimeMillis() + (durationSeconds * 1000);
-        // 3. Guardamos en el "Limbo" sin vincular la sesión a la IP.
+        // 3. Keep an in-memory marker for this process and persist the session for restarts.
         graceSessions.put(player.getUUID(), new GraceSession(expiryTime));
+        if (DirectAuth.getConfig().sessionPersistence && DirectAuth.getDatabase() != null) {
+            String ip = DirectAuth.getConfig().sessionBindToIp ? player.getIpAddress() : null;
+            DirectAuth.getDatabase().createSessionAsync(
+                    player.getGameProfile().getName(), player.getUUID().toString(), expiryTime, ip);
+        }
     }
 
     /**
      * Se llama cuando el jugador entra.
      * Intenta recuperar la sesión mientras no haya expirado.
      */
+    public CompletableFuture<Boolean> tryRestorePersistentSession(ServerPlayer player, UserData userData) {
+        if (!DirectAuth.getConfig().sessionPersistence
+                || DirectAuth.getDatabase() == null
+                || DirectAuth.getConfig().sessionGracePeriod <= 0
+                || userData == null
+                || (DirectAuth.getConfig().totpEnabled && userData.isTotpEnabled())
+                || hasPendingPremiumPasswordFallback(player.getUUID())
+                || hasPendingAutomaticPremiumLogin(player.getUUID())) {
+            return CompletableFuture.completedFuture(false);
+        }
+        String ip = DirectAuth.getConfig().sessionBindToIp ? player.getIpAddress() : null;
+        return DirectAuth.getDatabase().hasValidSessionAsync(
+                player.getUUID().toString(), ip, DirectAuth.getConfig().sessionBindToIp);
+    }
+
     public boolean tryRestoreSession(ServerPlayer player) {
         UUID uuid = player.getUUID();
         GraceSession session = graceSessions.get(uuid);
@@ -237,6 +287,21 @@ public class LoginManager {
 
     public void invalidateSession(ServerPlayer player) {
         graceSessions.remove(player.getUUID());
+        if (DirectAuth.getDatabase() != null) {
+            DirectAuth.getDatabase().deleteSessionAsync(player.getUUID().toString());
+        }
+    }
+
+    public void invalidateStoredSessions(UserData userData) {
+        if (userData == null || DirectAuth.getDatabase() == null) return;
+        java.util.LinkedHashSet<String> uuids = new java.util.LinkedHashSet<>();
+        if (userData.getOnlineUUID() != null && !userData.getOnlineUUID().isBlank()) {
+            uuids.add(userData.getOnlineUUID());
+        }
+        uuids.add(UUID.nameUUIDFromBytes(("OfflinePlayer:" + userData.getUsername())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString());
+        DirectAuth.getDatabase().deleteSessionsByUsernameAsync(userData.getUsername());
+        DirectAuth.getDatabase().deleteSessionsAsync(uuids);
     }
 
     // Clase interna simple para guardar los datos
