@@ -247,11 +247,11 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
         if (!this.directAuth$isStartingVerifiedProfile
                 && profile.getId() != null
-                && profile.getProperties().isEmpty()) {
+                && !directAuth$hasSignedTextures(profile)) {
             // The session service can be temporarily unavailable. Reuse the last
             // signed profile before allowing an empty profile to reach the client.
             if (this.directAuth$cachedPremiumProfile != null
-                    && !this.directAuth$cachedPremiumProfile.getProperties().isEmpty()
+                    && directAuth$hasSignedTextures(this.directAuth$cachedPremiumProfile)
                     && profile.getId().equals(this.directAuth$cachedPremiumProfile.getId())) {
                 ci.cancel();
                 this.directAuth$isStartingVerifiedProfile = true;
@@ -333,6 +333,11 @@ public abstract class MixinServerLoginPacketListenerImpl {
         Property textures = properties.iterator().next();
         if (!textures.hasSignature()) return null;
         return new String[] {textures.value(), textures.signature()};
+    }
+
+    @Unique
+    private static boolean directAuth$hasSignedTextures(GameProfile profile) {
+        return directAuth$texturePair(profile) != null;
     }
 
     @Unique
