@@ -81,14 +81,22 @@ public class ConnectionHandler {
         boolean isAuthenticated = automaticPremiumLogin;
 
         if (automaticPremiumLogin) {
-            DirectAuth.getLoginManager().setAuthenticated(player, true);
-            boolean passwordNeedsSetup = userData != null
-                    && LoginManager.passwordNeedsSetup(userData.getPasswordHash());
-            player.sendSystemMessage(Component.literal(passwordNeedsSetup
-                    ? DirectAuth.getConfig().getLang().msgPremiumAccountCreated
-                    : DirectAuth.getConfig().getLang().msgAutoLogin));
-            if (passwordNeedsSetup) {
-                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoPasswordSetup));
+            boolean needsTotp = DirectAuth.getConfig().totpEnabled
+                    && userData != null && userData.isTotpEnabled();
+            if (needsTotp) {
+                DirectAuth.getLoginManager().beginTotp(player, userData);
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
+                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
+            } else {
+                DirectAuth.getLoginManager().setAuthenticated(player, true);
+                boolean passwordNeedsSetup = userData != null
+                        && LoginManager.passwordNeedsSetup(userData.getPasswordHash());
+                player.sendSystemMessage(Component.literal(passwordNeedsSetup
+                        ? DirectAuth.getConfig().getLang().msgPremiumAccountCreated
+                        : DirectAuth.getConfig().getLang().msgAutoLogin));
+                if (passwordNeedsSetup) {
+                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoPasswordSetup));
+                }
             }
         }
         boolean premiumPasswordFallback = DirectAuth.getLoginManager()
