@@ -5,6 +5,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public final class TotpEngine {
     private static final String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -25,6 +27,40 @@ public final class TotpEngine {
             if (constantTimeEquals(generate(secret, current + offset), code)) return true;
         }
         return false;
+    }
+
+    public static List<String> generateRecoveryCodes() {
+        return java.util.stream.IntStream.range(0, 8)
+                .mapToObj(ignored -> "%08d".formatted(RANDOM.nextInt(100_000_000)))
+                .toList();
+    }
+
+    public static String hashRecoveryCodes(List<String> codes) {
+        return codes.stream().map(TotpEngine::hashRecoveryCode).collect(Collectors.joining(","));
+    }
+
+    public static String consumeRecoveryCodeAndGetRemaining(String storedHashes, String code) {
+        if (storedHashes == null || code == null) return null;
+        String expected = hashRecoveryCode(code);
+        List<String> hashes = new java.util.ArrayList<>(List.of(storedHashes.split(",")));
+        for (int i = 0; i < hashes.size(); i++) {
+            if (!java.security.MessageDigest.isEqual(
+                    hashes.get(i).getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+                    expected.getBytes(java.nio.charset.StandardCharsets.US_ASCII))) continue;
+            hashes.remove(i);
+            return String.join(",", hashes);
+        }
+        return null;
+    }
+
+    private static String hashRecoveryCode(String code) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(code.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     public static String otpauthUri(String issuer, String account, String secret) {

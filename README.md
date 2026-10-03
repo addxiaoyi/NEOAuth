@@ -22,7 +22,7 @@ All database operations run asynchronously, so the main server thread never free
 * **Strict Restrictions**: Unauthenticated players cannot move, chat, interact with blocks/entities, drop or pick up items, attack, gain XP, or regenerate health.
 * **Smart Data Migration**: When a player switches from offline to online mode their UUID changes, so the mod automatically migrates their data to the new UUID (see below).
 * **Localization**: Ships with English (`en`), Simplified Chinese (`zh`) and Spanish (`es`); fully customizable message strings.
-* **Optional TOTP 2FA**: Disabled by default; enable `totpEnabled` in the unified TOML before using `/totp setup`.
+* **Optional TOTP 2FA**: Disabled by default; enable `totpEnabled` in the unified TOML before using `/totp setup`. Setup displays one-time recovery codes; each code is invalidated individually when used.
 
 ## Commands
 

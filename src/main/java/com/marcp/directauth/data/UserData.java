@@ -9,6 +9,7 @@ public class UserData {
     private String texturesSignature;
     private String totpSecret;
     private boolean totpEnabled;
+    private String totpRecoveryCodes;
     
     // Constructor para nuevos usuarios
     public UserData(String username, String passwordHash) {
@@ -27,6 +28,7 @@ public class UserData {
     public String getTexturesSignature() { return texturesSignature; }
     public String getTotpSecret() { return totpSecret; }
     public boolean isTotpEnabled() { return totpEnabled; }
+    public String getTotpRecoveryCodes() { return totpRecoveryCodes; }
     
     public void setPasswordHash(String hash) { this.passwordHash = hash; }
     public void setPremium(boolean premium) { this.isPremium = premium; }
@@ -39,5 +41,9 @@ public class UserData {
     public void setTotp(String secret, boolean enabled) {
         this.totpSecret = secret;
         this.totpEnabled = enabled;
+    }
+
+    public void setTotpRecoveryCodes(String recoveryCodes) {
+        this.totpRecoveryCodes = recoveryCodes;
     }
 }

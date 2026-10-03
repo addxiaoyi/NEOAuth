@@ -49,6 +49,7 @@ public class LangConfig {
     public String msgTotpEnabled = "§a✓ Two-factor authentication enabled.";
     public String msgTotpDisabled = "§eTwo-factor authentication disabled.";
     public String msgTotpFeatureDisabled = "§eTwo-factor authentication is disabled by the server administrator.";
+    public String msgTotpRecoveryCodes = "§eSave these one-time recovery codes: §f%s";
     public String msgPremiumAccountCreated = "§a✓ Premium account created automatically. You were logged in without a password.";
     public String errPasswordSetupNotRequired = "§eYour account already has a password. Use §a/changepassword§e to change it.";
     public String msgPremiumFallbackLogin = "§eMojang is temporarily unavailable. Your previously verified premium identity was accepted automatically.";
@@ -193,6 +194,7 @@ public class LangConfig {
             msgTotpEnabled = "§a✓ Autenticación de dos factores activada.";
             msgTotpDisabled = "§eAutenticación de dos factores desactivada.";
             msgTotpFeatureDisabled = "§eLa autenticación de dos factores está desactivada por el administrador.";
+            msgTotpRecoveryCodes = "§eGuarda estos códigos de recuperación de un solo uso: §f%s";
             msgPremiumAccountCreated = "§a✓ Cuenta original creada automáticamente. Has entrado sin contraseña.";
             errPasswordSetupNotRequired = "§eTu cuenta ya tiene una contraseña. Usa §a/changepassword§e para cambiarla.";
             msgPremiumFallbackLogin = "§eMojang no está disponible temporalmente. Tu identidad premium verificada anteriormente fue aceptada automáticamente.";
@@ -275,6 +277,7 @@ public class LangConfig {
         msgTotpEnabled = "§a✓ 双因素认证已启用。";
         msgTotpDisabled = "§e双因素认证已关闭。";
         msgTotpFeatureDisabled = "§e服务器管理员尚未启用双因素认证。";
+        msgTotpRecoveryCodes = "§e请保存这些一次性恢复码：§f%s";
         msgPremiumAccountCreated = "§a✓ 已自动创建正版账号，并免密登录。";
         errPasswordSetupNotRequired = "§e你的账号已经设置密码，请使用 §a/changepassword§e 修改。";
         msgPremiumFallbackLogin = "§eMojang 暂时不可用，之前验证过的正版身份已自动通过。";

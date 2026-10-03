@@ -21,6 +21,8 @@ public final class TotpCommand {
                 .then(Commands.literal("setup").executes(TotpCommand::setup))
                 .then(Commands.literal("verify").then(Commands.argument("code", StringArgumentType.word())
                         .executes(TotpCommand::verify)))
+                .then(Commands.literal("recovery").then(Commands.argument("code", StringArgumentType.word())
+                        .executes(TotpCommand::verify)))
                 .then(Commands.literal("disable").then(Commands.argument("password", StringArgumentType.greedyString())
                         .executes(TotpCommand::disable))));
     }
@@ -50,6 +52,13 @@ public final class TotpCommand {
                 return;
             }
             String uri = TotpEngine.otpauthUri(DirectAuth.getConfig().totpIssuer, username, user.getTotpSecret());
+            if (user.getTotpRecoveryCodes() == null || user.getTotpRecoveryCodes().isBlank()) {
+                java.util.List<String> codes = TotpEngine.generateRecoveryCodes();
+                user.setTotpRecoveryCodes(TotpEngine.hashRecoveryCodes(codes));
+                DirectAuth.getDatabase().updateUserAsync(username, user);
+                player.sendSystemMessage(Component.literal(String.format(
+                        DirectAuth.getConfig().getLang().msgTotpRecoveryCodes, String.join(" ", codes))));
+            }
             player.sendSystemMessage(Component.literal(String.format(DirectAuth.getConfig().getLang().msgTotpSetupSecret, uri)));
         }, player.getServer());
         return 1;
@@ -67,6 +76,15 @@ public final class TotpCommand {
             boolean valid = user != null && user.getTotpSecret() != null
                     && TotpEngine.verify(user.getTotpSecret(), code,
                     DirectAuth.getConfig().totpWindowSize, DirectAuth.getConfig().totpTimeStepSeconds);
+            if (!valid && user != null) {
+                String remainingCodes = TotpEngine.consumeRecoveryCodeAndGetRemaining(
+                        user.getTotpRecoveryCodes(), code);
+                if (remainingCodes != null) {
+                    user.setTotpRecoveryCodes(remainingCodes.isBlank() ? null : remainingCodes);
+                    DirectAuth.getDatabase().updateUserAsync(username, user);
+                    valid = true;
+                }
+            }
             if (!valid) {
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpInvalid));
                 return;
