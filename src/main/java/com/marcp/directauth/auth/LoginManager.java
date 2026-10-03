@@ -21,6 +21,7 @@ import com.marcp.directauth.data.UserData; // Asegúrate de importar esto
 public class LoginManager {
     // Jugadores actualmente autenticados (UUID offline -> true)
     private final Set<UUID> authenticatedPlayers = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, AuthenticationMethod> authenticationMethods = new ConcurrentHashMap<>();
     
     // Cooldown de intentos fallidos (UUID -> timestamp del último intento)
     private final Map<UUID, Long> loginAttempts = new ConcurrentHashMap<>();
@@ -164,15 +165,26 @@ public class LoginManager {
     public void setAuthenticated(ServerPlayer player, boolean authenticated) {
         if (authenticated) {
             authenticatedPlayers.add(player.getUUID());
+            authenticationMethods.putIfAbsent(player.getUUID(), AuthenticationMethod.PASSWORD);
             failedAttempts.remove(player.getUUID());
             loginAttempts.remove(player.getUUID());
         } else {
             authenticatedPlayers.remove(player.getUUID());
+            authenticationMethods.remove(player.getUUID());
         }
+    }
+
+    public void markAuthenticationMethod(ServerPlayer player, AuthenticationMethod method) {
+        authenticationMethods.put(player.getUUID(), method);
+    }
+
+    public AuthenticationMethod getAuthenticationMethod(ServerPlayer player) {
+        return authenticationMethods.getOrDefault(player.getUUID(), AuthenticationMethod.NONE);
     }
     
     public void removePlayer(ServerPlayer player) {
         authenticatedPlayers.remove(player.getUUID());
+        authenticationMethods.remove(player.getUUID());
         loginAttempts.remove(player.getUUID());
         failedAttempts.remove(player.getUUID());
         connectionTimes.remove(player.getUUID());
@@ -324,6 +336,15 @@ public class LoginManager {
         }
     }
     
+    public enum AuthenticationMethod {
+        NONE,
+        PASSWORD,
+        PREMIUM,
+        SESSION,
+        PREMIUM_OUTAGE_FALLBACK,
+        TOTP_PENDING
+    }
+
     private static final class IpAttempt {
         private int failures;
         private long blockedUntil;

@@ -110,6 +110,10 @@ public class ConnectionHandler {
             if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)
                     && !premiumPasswordFallback) {
                 DirectAuth.getLoginManager().setAuthenticated(player, true);
+                DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                        premiumPasswordFallback
+                                ? com.marcp.directauth.auth.LoginManager.AuthenticationMethod.PREMIUM_OUTAGE_FALLBACK
+                                : com.marcp.directauth.auth.LoginManager.AuthenticationMethod.PREMIUM);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAutoLogin));
                 isAuthenticated = true;
             } else if (expectedUUID != null && expectedUUID.equalsIgnoreCase(actualUUID)) {
@@ -125,6 +129,8 @@ public class ConnectionHandler {
         if (!isAuthenticated) {
             // INTENTO DE RESTAURACIÓN DE SESIÓN
             if (!premiumPasswordFallback && DirectAuth.getLoginManager().tryRestoreSession(player)) {
+                DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                        com.marcp.directauth.auth.LoginManager.AuthenticationMethod.SESSION);
                 player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgSessionRestored));
                 isAuthenticated = true;
             }

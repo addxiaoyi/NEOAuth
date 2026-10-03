@@ -100,6 +100,8 @@ public class LoginCommand {
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
             return;
         }
+        DirectAuth.getLoginManager().markAuthenticationMethod(player,
+                LoginManager.AuthenticationMethod.PASSWORD);
         completeAuthenticated(player);
     }
 
