@@ -212,6 +212,7 @@ public abstract class MixinServerLoginPacketListenerImpl {
             this.directAuth$premiumFallbackStarted = false;
             if (DirectAuth.getLoginManager() != null) {
                 DirectAuth.getLoginManager().clearPremiumPasswordFallback(premiumUuid);
+                DirectAuth.getLoginManager().clearAutomaticPremiumLogin(premiumUuid);
             }
             DirectAuth.LOGGER.error("Could not start password fallback for {}", username, exception);
             return false;

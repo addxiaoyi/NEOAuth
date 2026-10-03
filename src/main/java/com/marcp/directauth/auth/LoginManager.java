@@ -169,6 +169,10 @@ public class LoginManager {
         Long expiresAt = automaticPremiumLogins.remove(premiumUuid);
         return expiresAt != null && expiresAt >= System.currentTimeMillis();
     }
+
+    public void clearAutomaticPremiumLogin(UUID premiumUuid) {
+        automaticPremiumLogins.remove(premiumUuid);
+    }
     
     public void beginTotp(ServerPlayer player, UserData userData) {
         beginTotp(player, userData, AuthenticationMethod.PASSWORD);
