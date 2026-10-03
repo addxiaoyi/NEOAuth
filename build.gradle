@@ -146,6 +146,14 @@ dependencies {
     // El jarJar de arriba ya lo embebe en el .jar de producción.
     additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.46.0.0'
     additionalRuntimeClasspath 'org.bouncycastle:bcprov-jdk18on:1.80'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
