@@ -55,9 +55,9 @@ public class LoginCommand {
         String password = StringArgumentType.getString(context, "password");
         CompletableFuture<LoginResult> login = DirectAuth.getDatabase().getUserAsync(username)
                 .thenCompose(user -> {
-                    if (user == null) return CompletableFuture.completedFuture(new LoginResult(null, false));
+                    if (user == null) return CompletableFuture.completedFuture(new LoginResult(null, false, password));
                     return LoginManager.checkPasswordAsync(password, user.getPasswordHash())
-                            .thenApply(valid -> new LoginResult(user, valid));
+                            .thenApply(valid -> new LoginResult(user, valid, password));
                 });
 
         login.thenAcceptAsync(result -> finishLogin(player, result), player.getServer())
@@ -89,6 +89,12 @@ public class LoginCommand {
         }
 
         DirectAuth.getLoginManager().recordLoginAttempt(player, true);
+        if (LoginManager.passwordNeedsRehash(result.userData().getPasswordHash())) {
+            String upgradedHash = LoginManager.hashPassword(result.password());
+            result.userData().setPasswordHash(upgradedHash);
+            DirectAuth.getDatabase().updateUserAsync(player.getGameProfile().getName(), result.userData());
+        }
+
         if (DirectAuth.getConfig().totpEnabled && result.userData().isTotpEnabled()) {
             DirectAuth.getLoginManager().beginTotp(player, result.userData());
             player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgTotpLoginRequired));
@@ -130,5 +136,5 @@ public class LoginCommand {
         safePos.ifPresent(pos -> player.teleportTo(level, pos.x, pos.y, pos.z, player.getRespawnAngle(), 0.0F));
     }
 
-    private record LoginResult(UserData userData, boolean passwordValid) {}
+    private record LoginResult(UserData userData, boolean passwordValid, String password) {}
 }

@@ -79,7 +79,7 @@ NEOauth/
 
 ### 4.2 `auth/`
 - **`LoginManager`** — central authentication state. Thread-safe (`ConcurrentHashMap`). Holds `authenticatedPlayers`, `failedAttempts`, `loginAttempts` (cooldown), `connectionTimes` (login timeout), `preLoginCache` (mixin-populated), `graceSessions` (time-limited re-login without IP binding), and short-lived automatic-login markers. Runs a `ScheduledExecutorService` for grace-session cleanup at `sessionCleanupInterval` minutes. It never stores plaintext passwords.
-- **Password hashing is PBKDF2WithHmacSHA256**, 100k iterations, 256-bit key, Base64 `salt:hash` encoding (see `LoginManager.ALGORITHM`).
+- **Password hashing is Argon2id** with unique salts. Legacy PBKDF2 `salt:hash` records remain compatible and are upgraded to Argon2id after successful login.
 - **`MojangAPI`** — async UUID lookup against `api.mojang.com/users/profiles/minecraft/{name}`, returns `CompletableFuture<String>`. Callbacks must be marshalled back to the main thread via `server.execute(...)`.
 - **`ConfirmationManager`** — pending-action store (30s TTL) used by `/changepassword` and `/unregister`, drained by `/directauth confirm`.
 

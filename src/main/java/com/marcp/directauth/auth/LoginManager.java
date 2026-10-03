@@ -1,6 +1,8 @@
 package com.marcp.directauth.auth;
 
 import net.minecraft.server.level.ServerPlayer;
+import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
+import org.bouncycastle.crypto.params.Argon2Parameters;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import java.security.MessageDigest;
@@ -75,6 +77,11 @@ public class LoginManager {
     // Configuración de PBKDF2
     private static final int ITERATIONS = 100000;
     private static final String AUTO_PASSWORD_PREFIX = "AUTO_GENERATED:";
+    private static final int ARGON2_MEMORY_KIB = 19_456;
+    private static final int ARGON2_ITERATIONS = 2;
+    private static final int ARGON2_PARALLELISM = 1;
+    private static final int ARGON2_HASH_BYTES = 32;
+    private static final String ARGON2_PREFIX = "argon2id$";
     private static final int KEY_LENGTH = 256;
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -344,34 +351,86 @@ public class LoginManager {
     }
 
     public static String hashPassword(String password) {
+        if (password == null) throw new IllegalArgumentException("Password cannot be null");
         byte[] salt = new byte[16];
         RANDOM.nextBytes(salt);
-        byte[] hash = pbkdf2(password.toCharArray(), salt);
-        
-        // Formato: salt:hash (Base64)
-        return Base64.getEncoder().encodeToString(salt) + ":" + 
-               Base64.getEncoder().encodeToString(hash);
+        char[] passwordChars = password.toCharArray();
+        try {
+            byte[] hash = argon2id(passwordChars, salt, ARGON2_MEMORY_KIB, ARGON2_ITERATIONS, ARGON2_PARALLELISM);
+            return ARGON2_PREFIX + ARGON2_MEMORY_KIB + "$" + ARGON2_ITERATIONS + "$"
+                    + ARGON2_PARALLELISM + "$" + Base64.getEncoder().encodeToString(salt) + "$"
+                    + Base64.getEncoder().encodeToString(hash);
+        } finally {
+            Arrays.fill(passwordChars, '\0');
+        }
     }
-    
+
+    public static boolean passwordNeedsRehash(String storedHash) {
+        return storedHash == null || !storedHash.startsWith(ARGON2_PREFIX);
+    }
+
     public static CompletableFuture<Boolean> checkPasswordAsync(String password, String storedHash) {
         return CompletableFuture.supplyAsync(() -> checkPassword(password, storedHash));
     }
 
     public static boolean checkPassword(String password, String storedHash) {
         if (password == null || storedHash == null) return false;
+        if (storedHash.startsWith(ARGON2_PREFIX)) return checkArgon2(password, storedHash);
+        return checkPbkdf2(password, storedHash);
+    }
+
+    private static boolean checkArgon2(String password, String storedHash) {
+        String[] parts = storedHash.split("\\$", -1);
+        if (parts.length != 6 || !"argon2id".equals(parts[0])) return false;
+        try {
+            int memory = Integer.parseInt(parts[1]);
+            int iterations = Integer.parseInt(parts[2]);
+            int parallelism = Integer.parseInt(parts[3]);
+            byte[] salt = Base64.getDecoder().decode(parts[4]);
+            byte[] expected = Base64.getDecoder().decode(parts[5]);
+            char[] chars = password.toCharArray();
+            try {
+                byte[] actual = argon2id(chars, salt, memory, iterations, parallelism);
+                return MessageDigest.isEqual(expected, actual);
+            } finally {
+                Arrays.fill(chars, '\0');
+            }
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static boolean checkPbkdf2(String password, String storedHash) {
         String[] parts = storedHash.split(":", -1);
         if (parts.length != 2) return false;
-
         try {
             byte[] salt = Base64.getDecoder().decode(parts[0]);
             byte[] originalHash = Base64.getDecoder().decode(parts[1]);
-            byte[] newHash = pbkdf2(password.toCharArray(), salt);
-            return MessageDigest.isEqual(originalHash, newHash);
+            char[] chars = password.toCharArray();
+            try {
+                return MessageDigest.isEqual(originalHash, pbkdf2(chars, salt));
+            } finally {
+                Arrays.fill(chars, '\0');
+            }
         } catch (IllegalArgumentException exception) {
             return false;
         }
     }
-    
+
+    private static byte[] argon2id(char[] password, byte[] salt, int memory, int iterations, int parallelism) {
+        Argon2Parameters parameters = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withSalt(salt)
+                .withMemoryAsKB(memory)
+                .withIterations(iterations)
+                .withParallelism(parallelism)
+                .build();
+        Argon2BytesGenerator generator = new Argon2BytesGenerator();
+        generator.init(parameters);
+        byte[] hash = new byte[ARGON2_HASH_BYTES];
+        generator.generateBytes(password, hash);
+        return hash;
+    }
+
     private static byte[] pbkdf2(char[] password, byte[] salt) {
         try {
             PBEKeySpec spec = new PBEKeySpec(password, salt, ITERATIONS, KEY_LENGTH);

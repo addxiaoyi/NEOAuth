@@ -138,11 +138,14 @@ dependencies {
     
     // Driver de SQLite
     implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.80'
     jarJar 'org.xerial:sqlite-jdbc:3.46.0.0'
+    jarJar 'org.bouncycastle:bcprov-jdk18on:1.80'
     // En dev (runServer/runClient) las librerías que no son mods no se cargan en el
     // classpath del juego, así que el driver hay que añadirlo explícitamente.
     // El jarJar de arriba ya lo embebe en el .jar de producción.
     additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.46.0.0'
+    additionalRuntimeClasspath 'org.bouncycastle:bcprov-jdk18on:1.80'
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

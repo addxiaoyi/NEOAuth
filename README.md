@@ -13,7 +13,7 @@ All database operations run asynchronously, so the main server thread never free
 * **Server-Side Only**: Install it on your server and players join with any vanilla client. Nothing to install client-side.
 * **Zero-Configuration Database**: Uses an embedded SQLite database. No MySQL or external database server required.
 * **No Lag**: All database I/O is performed asynchronously on a separate thread pool.
-* **Strong Security**: Passwords are hashed with PBKDF2WithHmacSHA256 using a unique salt per user.
+* **Strong Security**: Passwords use Argon2id with unique salts. Existing PBKDF2 accounts remain compatible and are upgraded to Argon2id after a successful login.
 * **Online Auto-Login**: Registered accounts are checked against Mojang during login and, when verified, skip `/online` and `/login` on future sessions.
 * **Automatic Premium Login**: Registered accounts are checked against Mojang during login. A successful premium session logs the player in without `/login` or `/online` and migrates existing offline-UUID data once.
 * **Known Premium Fallback**: If Mojang verification fails or times out for a previously verified account, NEOauth automatically accepts the stored premium UUID and cached signed skin properties without asking for `/login`. Unknown/offline accounts still require a password when premium verification fails.
@@ -117,7 +117,7 @@ A: The server administrator likely hadn't added that mod's data folder to `migra
 
 ## Technical Details
 
-* **Hashing**: PBKDF2WithHmacSHA256 with a unique salt per user.
+* **Hashing**: Argon2id with unique salts; legacy PBKDF2 hashes are accepted once and transparently upgraded after login.
 * **Storage**: SQLite at `world/serverconfig/directauth.db` — no external database server. A legacy `NEOauth_users.json` is migrated automatically on first run if present.
 * **Session Management**: Sessions are validated against the internal database (and Mojang's session servers for online users).
 * **Protection**: The login listener is injected at high priority to prevent unauthorized packet processing.
