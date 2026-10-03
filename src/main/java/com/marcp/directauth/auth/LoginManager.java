@@ -234,6 +234,14 @@ public class LoginManager {
         connectionTimes.put(player.getUUID(), System.currentTimeMillis());
     }
 
+    public int getRemainingLoginSeconds(ServerPlayer player) {
+        if (isAuthenticated(player)) return 0;
+        Long joinTime = connectionTimes.get(player.getUUID());
+        if (joinTime == null) return Math.max(0, com.marcp.directauth.DirectAuth.getConfig().loginTimeout);
+        long elapsed = (System.currentTimeMillis() - joinTime) / 1000;
+        return Math.max(0, com.marcp.directauth.DirectAuth.getConfig().loginTimeout - (int) elapsed);
+    }
+
     public boolean hasTimedOut(ServerPlayer player) {
         if (isAuthenticated(player)) return false; // Si ya está dentro, no hay timeout
 

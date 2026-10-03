@@ -2,6 +2,7 @@ package com.marcp.directauth.events;
 
 import com.marcp.directauth.DirectAuth;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -29,9 +30,31 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PlayerRestrictionHandler {
     
     private static final Map<UUID, Vec3> anchorPositions = new ConcurrentHashMap<>();
+    private static final Map<UUID, ServerBossEvent> authBossBars = new ConcurrentHashMap<>();
 
     public static void removeAnchor(ServerPlayer player) {
         anchorPositions.remove(player.getUUID());
+        removeAuthBossBar(player);
+    }
+
+    private static void ensureAuthBossBar(ServerPlayer player, int remainingSeconds) {
+        ServerBossEvent bossBar = authBossBars.computeIfAbsent(player.getUUID(), ignored -> {
+            ServerBossEvent created = new ServerBossEvent(
+                    Component.literal(""), net.minecraft.world.BossEvent.BossBarColor.RED, net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS);
+            created.setCreateWorldFog(false);
+            created.setDarkenScreen(false);
+            created.addPlayer(player);
+            return created;
+        });
+        int timeout = Math.max(1, DirectAuth.getConfig().loginTimeout);
+        bossBar.setName(Component.literal(String.format(
+                DirectAuth.getConfig().getLang().msgAuthBossbar, remainingSeconds)));
+        bossBar.setProgress(Math.max(0.0F, Math.min(1.0F, remainingSeconds / (float) timeout)));
+    }
+
+    private static void removeAuthBossBar(ServerPlayer player) {
+        ServerBossEvent bossBar = authBossBars.remove(player.getUUID());
+        if (bossBar != null) bossBar.removePlayer(player);
     }
 
     public static void hideEffectsFromClient(ServerPlayer player) {
@@ -90,14 +113,18 @@ public class PlayerRestrictionHandler {
                 
                 // Removed player.clearFire() as fire ticks will be restored on authentication.
                 
-                if (player.tickCount % 100 == 0) {
+                if (player.tickCount % 20 == 0) {
+                    int remaining = DirectAuth.getLoginManager().getRemainingLoginSeconds(player);
+                    ensureAuthBossBar(player, remaining);
                     player.displayClientMessage(
-                        Component.literal(DirectAuth.getConfig().getLang().msgAuthReminder),
-                        true 
+                        Component.literal(String.format(
+                                DirectAuth.getConfig().getLang().msgAuthCountdown, remaining)),
+                        true
                     );
                 }
             } 
-            else if (anchorPositions.containsKey(player.getUUID())) {
+            else if (anchorPositions.containsKey(player.getUUID()) || authBossBars.containsKey(player.getUUID())) {
+                removeAuthBossBar(player);
                 anchorPositions.remove(player.getUUID());
             }
         }
