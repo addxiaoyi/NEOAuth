@@ -17,12 +17,12 @@ All database operations run asynchronously, so the main server thread never free
 * **Online Auto-Login**: Registered accounts are checked against Mojang during login and, when verified, skip `/online` and `/login` on future sessions.
 * **Automatic Premium Login**: Registered accounts are checked against Mojang during login. A successful premium session logs the player in without `/login` or `/online` and migrates existing offline-UUID data once.
 * **Known Premium Fallback**: If Mojang verification fails or times out for a previously verified account, NEOauth automatically accepts the stored premium UUID and cached signed skin properties without asking for `/login`. Unknown/offline accounts still require a password when premium verification fails.
-* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again. The default is 30 minutes, and the grace session is not restricted to the previous IP address. NEOauth stores a short-lived session marker, never a plaintext password.
+* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again. The default is 10 minutes, and the grace session is not restricted to the previous IP address. NEOauth stores a short-lived session marker, never a plaintext password.
 * **Anti-Bot Protection**: Configurable registration delay and a maximum number of accounts per IP address.
 * **Strict Restrictions**: Unauthenticated players cannot move, chat, interact with blocks/entities, drop or pick up items, attack, gain XP, or regenerate health.
 * **Smart Data Migration**: When a player switches from offline to online mode their UUID changes, so the mod automatically migrates their data to the new UUID (see below).
 * **Localization**: Ships with English (`en`), Simplified Chinese (`zh`) and Spanish (`es`); fully customizable message strings.
-* **Optional TOTP 2FA**: Disabled by default; enable `totpEnabled` in the unified TOML before using `/totp setup`. Setup displays one-time recovery codes; each code is invalidated individually when used.
+* **Optional TOTP 2FA**: Disabled by default; set `totpEnabled = true` in the unified TOML before using `/totp setup`. Setup displays one-time recovery codes; each code is invalidated individually when used.
 
 ## Commands
 
