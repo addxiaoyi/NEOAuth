@@ -169,7 +169,7 @@ public class LangConfig {
             errPasswordTooShort = "§cLa contraseña debe tener al menos 4 caracteres.";
             errPasswordTooLong = "§cLa contraseña no puede tener más de 32 caracteres.";
             msgRegistered = "§a✓ Cuenta registrada exitosamente.";
-            msgPremiumEnableHint = "§7Si usas una cuenta original de Minecraft, DirectAuth la verificará automáticamente en tu próximo acceso.";
+            msgPremiumEnableHint = "§7Si usas una cuenta original de Minecraft, NEOauth la verificará automáticamente en tu próximo acceso.";
             errRegistrationCooldown = "§cPor favor, espera un momento antes de registrarte.";
             errIpLimitReached = "§cSe ha alcanzado el límite de registros para esta dirección IP.";
             errStorageUnavailable = "§cEl almacenamiento de autenticación no está disponible temporalmente. Inténtalo de nuevo.";
@@ -210,7 +210,7 @@ public class LangConfig {
             msgPremiumSuccess = "§a✓ Cuenta verificada como Modo Online.";
             msgPremiumKick = "§a¡Cuenta verificada!\n§ePor favor, vuelve a entrar para aplicar los cambios.";
             msgAutoLoginHint = "§7El auto-login está activado para esta cuenta.";
-            msgOnlineModeWarning = "§6¡ADVERTENCIA! §eActivar el Modo Online migrará tus datos de jugador (ej. inventario, estadísticas, avances). Aunque DirectAuth intenta migrar datos de otros mods, existe un pequeño riesgo de perder datos específicos de mods si no se configura correctamente. Asegúrate de que el dueño de tu servidor haya configurado todas las carpetas de datos de mods en config/Neoauth/Neoauth.toml antes de continuar, o haz una copia de seguridad.";
+            msgOnlineModeWarning = "§6¡ADVERTENCIA! §eActivar el Modo Online migrará tus datos de jugador (ej. inventario, estadísticas, avances). Aunque NEOauth intenta migrar datos de otros mods, existe un pequeño riesgo de perder datos específicos de mods si no se configura correctamente. Asegúrate de que el dueño de tu servidor haya configurado todas las carpetas de datos de mods en config/Neoauth/Neoauth.toml antes de continuar, o haz una copia de seguridad.";
 
             // --- Admin Messages ---
             msgPremiumWarning = "§c¡ADVERTENCIA! §7Estás a punto de activar el Modo Online.\n§7Si no eres dueño de esta cuenta, §cperderás el acceso.\n§7Escribe §b/online <tu_contraseña> §7para confirmar.";
@@ -219,8 +219,8 @@ public class LangConfig {
             errAdminUsage = "§cUso: /directauth online <usuario> <true|false>";
             errAdminUsageReset = "§cUso: /directauth resetpass <usuario> <nueva_contraseña>";
             errAdminUsageUnregister = "§cUso: /directauth unregister <usuario>";
-            msgConfigReloaded = "§a✓ Configuración de DirectAuth recargada.";
-            msgLangReset = "§a✓ Archivos de idioma integrados de DirectAuth (Inglés/Chino/Español) restablecidos a los valores por defecto.";
+            msgConfigReloaded = "§a✓ Configuración de NEOauth recargada.";
+            msgLangReset = "§a✓ Archivos de idioma integrados de NEOauth (Inglés/Chino/Español) restablecidos a los valores por defecto.";
 
             // --- Restriction Messages ---
             msgNoDrop = "§cNo puedes soltar objetos antes de autenticarte.";
@@ -254,7 +254,7 @@ public class LangConfig {
         errPasswordTooShort = "§c密码长度至少为 4 个字符。";
         errPasswordTooLong = "§c密码长度不能超过 32 个字符。";
         msgRegistered = "§a✓ 账号注册成功。";
-        msgPremiumEnableHint = "§7如果你使用正版 Minecraft，DirectAuth 会在下次登录时自动验证。";
+        msgPremiumEnableHint = "§7如果你使用正版 Minecraft，NEOauth 会在下次登录时自动验证。";
         errRegistrationCooldown = "§c请稍等片刻后再注册。";
         errIpLimitReached = "§c此 IP 的注册账号数量已达到上限。";
         errStorageUnavailable = "§c认证存储暂时不可用，请稍后再试。";
@@ -301,7 +301,7 @@ public class LangConfig {
         errAdminUsage = "§c用法：/directauth online <用户> <true|false>";
         errAdminUsageReset = "§c用法：/directauth resetpass <用户> <新密码>";
         errAdminUsageUnregister = "§c用法：/directauth unregister <用户>";
-        msgConfigReloaded = "§a✓ DirectAuth 配置已重新加载。";
+        msgConfigReloaded = "§a✓ NEOauth 配置已重新加载。";
         msgLangReset = "§a✓ 内置中英文和西班牙语语言文件已恢复默认值。";
 
         msgNoDrop = "§c完成身份验证前不能丢弃物品。";
