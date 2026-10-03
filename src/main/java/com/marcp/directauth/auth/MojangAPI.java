@@ -2,6 +2,8 @@ package com.marcp.directauth.auth;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
@@ -14,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 
 public final class MojangAPI {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -57,6 +60,38 @@ public final class MojangAPI {
                     LOGGER.warn("NEOauth: Mojang profile lookup failed for {}", username, exception);
                     return null;
                 });
+    }
+
+    /** Fetches a signed profile directly, bypassing third-party Authlib host rewrites. */
+    public static GameProfile fetchSignedProfile(UUID uuid, String fallbackName) {
+        URI uri = URI.create("https://sessionserver.mojang.com/session/minecraft/profile/"
+                + uuid.toString().replace("-", "") + "?unsigned=false");
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+        try {
+            HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) return null;
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            String name = json.has("name") ? json.get("name").getAsString() : fallbackName;
+            GameProfile profile = new GameProfile(uuid, name);
+            if (!json.has("properties")) return profile;
+            for (var property : json.getAsJsonArray("properties")) {
+                JsonObject item = property.getAsJsonObject();
+                if (!item.has("name") || !item.has("value")) continue;
+                String signature = item.has("signature") ? item.get("signature").getAsString() : null;
+                profile.getProperties().put(item.get("name").getAsString(),
+                        signature == null
+                                ? new Property(item.get("name").getAsString(), item.get("value").getAsString())
+                                : new Property(item.get("name").getAsString(), item.get("value").getAsString(), signature));
+            }
+            return profile;
+        } catch (Exception exception) {
+            LOGGER.warn("NEOauth: direct signed profile lookup failed for {}", uuid, exception);
+            return null;
+        }
     }
 
     private static boolean isValidUsername(String username) {

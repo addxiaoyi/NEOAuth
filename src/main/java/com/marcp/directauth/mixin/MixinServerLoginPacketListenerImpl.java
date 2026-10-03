@@ -2,6 +2,7 @@ package com.marcp.directauth.mixin;
 
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
+import com.marcp.directauth.auth.MojangAPI;
 import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.mojang.authlib.GameProfile;
@@ -259,11 +260,11 @@ public abstract class MixinServerLoginPacketListenerImpl {
                 return;
             }
             try {
-                ProfileResult refreshed = this.server.getSessionService().fetchProfile(profile.getId(), true);
-                if (refreshed != null && !refreshed.profile().getProperties().isEmpty()) {
+                GameProfile refreshed = MojangAPI.fetchSignedProfile(profile.getId(), profile.getName());
+                if (refreshed != null && !refreshed.getProperties().isEmpty()) {
                     ci.cancel();
                     this.directAuth$isStartingVerifiedProfile = true;
-                    this.directAuth$startClientVerification(refreshed.profile());
+                    this.directAuth$startClientVerification(refreshed);
                     this.directAuth$isStartingVerifiedProfile = false;
                     return;
                 }
