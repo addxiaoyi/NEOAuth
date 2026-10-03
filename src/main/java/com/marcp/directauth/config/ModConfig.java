@@ -11,6 +11,7 @@ import com.google.gson.JsonObject;
 
 public class ModConfig {
     private static final boolean DEFAULT_TOTP_ENABLED = false;
+    private static final int MESSAGE_SCHEMA_VERSION = 2;
 
     public String language = "zh";
     public int sessionGracePeriod = 600;
@@ -32,6 +33,7 @@ public class ModConfig {
     public int totpWindowSize = 1;
     public int totpTimeStepSeconds = 30;
     public boolean totpEnabled = DEFAULT_TOTP_ENABLED;
+    public int messagesVersion = MESSAGE_SCHEMA_VERSION;
     public Map<String, MigrationMode> migrationMap = new LinkedHashMap<>();
     private transient LangConfig langConfig;
 
@@ -72,6 +74,7 @@ public class ModConfig {
             }
         }
 
+        int storedMessagesVersion = document.getInt("config.messagesVersion", 0);
         config.normalize();
         LangConfig english = language(document, "en");
         LangConfig chinese = language(document, "zh");
@@ -81,6 +84,12 @@ public class ModConfig {
             chinese = LangConfig.load(legacyLanguageDirectory.resolve("DirectAuth-lang-zh.json"), "zh");
             spanish = LangConfig.load(legacyLanguageDirectory.resolve("DirectAuth-lang-es.json"), "es");
         }
+        if (storedMessagesVersion < MESSAGE_SCHEMA_VERSION) {
+            english.applyPromptDefaults("en");
+            chinese.applyPromptDefaults("zh");
+            spanish.applyPromptDefaults("es");
+        }
+        config.messagesVersion = MESSAGE_SCHEMA_VERSION;
         config.langConfig = switch (config.language.toLowerCase()) {
             case "zh", "zh_cn", "zh-cn" -> chinese;
             case "es" -> spanish;

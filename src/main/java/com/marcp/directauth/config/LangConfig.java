@@ -242,6 +242,25 @@ public class LangConfig {
         }
     }
 
+    public void applyPromptDefaults(String language) {
+        if ("zh".equalsIgnoreCase(language) || "zh_cn".equalsIgnoreCase(language)
+                || "zh-cn".equalsIgnoreCase(language)) {
+            msgAuthReminder = "§e欢迎！§7已有账号请输入 §a/login <密码>§7，新玩家请输入 §a/register <密码>§7。";
+            msgAuthCountdown = "§c请先完成身份验证 §7· 剩余 %d 秒";
+            msgAuthBossbar = "§c完成验证后即可继续 · 剩余 %d 秒";
+            return;
+        }
+        if ("es".equalsIgnoreCase(language)) {
+            msgAuthReminder = "§eBienvenido. §7Usa §a/login <contraseña>§7 o §a/register <contraseña>§7 para crear una cuenta.";
+            msgAuthCountdown = "§cAutenticación requerida §7· quedan %d s";
+            msgAuthBossbar = "§cAutentícate para continuar · %d segundos";
+            return;
+        }
+        msgAuthReminder = "§eWelcome! §7Use §a/login <password>§7, or §a/register <password>§7 to create an account.";
+        msgAuthCountdown = "§cAuthentication required §7· %d seconds";
+        msgAuthBossbar = "§cAuthenticate to continue · %d seconds";
+    }
+
     private void applyChineseDefaults() {
         msgWelcome = "§e欢迎！请输入 §a/register <密码>§e 注册账号。";
         msgLoginRequest = "§e请输入 §a/login <密码>§e 登录。";

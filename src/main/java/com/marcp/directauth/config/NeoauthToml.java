@@ -41,6 +41,16 @@ final class NeoauthToml {
         if (value != null) values.put(key, String.valueOf(value));
     }
 
+    int getInt(String key, int fallback) {
+        String value = values.get(key);
+        if (value == null) return fallback;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
     void putSection(String section, Object source) {
         for (Field field : source.getClass().getFields()) {
             if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers())) continue;

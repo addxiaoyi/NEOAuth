@@ -52,4 +52,23 @@ class ModConfigTest {
         assertEquals(5, config.totpWindowSize);
         assertEquals(10, config.totpTimeStepSeconds);
     }
+    @Test
+    void oldPromptTextIsMigratedToTheNaturalDefaults() throws Exception {
+        Path configPath = tempDir.resolve("Neoauth.toml");
+        Files.writeString(configPath, """
+                [config]
+                language = "zh"
+                messagesVersion = 1
+                [messages.zh]
+                msgAuthReminder = "旧版重复提示"
+                """);
+
+        ModConfig.load(configPath);
+        String generated = Files.readString(configPath);
+
+        assertFalse(generated.contains("旧版重复提示"));
+        assertTrue(generated.contains("已有账号请输入"));
+        assertTrue(generated.contains("messagesVersion = 2"));
+    }
+
 }
