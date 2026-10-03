@@ -13,9 +13,9 @@ public class LangConfig {
     // --- General Messages ---
     public String msgWelcome = "§eWelcome! Use §a/register <password>§e to create your account.";
     public String msgLoginRequest = "§eUse §a/login <password>§e to authenticate.";
-    public String msgAuthReminder = "§cYou must authenticate: /register <password> or /login <password>";
-    public String msgAuthCountdown = "§cAuthentication required §7(%d seconds remaining)";
-    public String msgAuthBossbar = "§cAuthenticate to play · %d seconds";
+    public String msgAuthReminder = "§eWelcome! §7Use §a/login <password>§7, or §a/register <password>§7 to create an account.";
+    public String msgAuthCountdown = "§cAuthentication required §7· %d seconds";
+    public String msgAuthBossbar = "§cAuthenticate to continue · %d seconds";
     public String errNotPlayer = "Only players can use this command.";
     
     // --- Registration Messages ---
@@ -159,9 +159,9 @@ public class LangConfig {
             // --- General Messages ---
             msgWelcome = "§e¡Bienvenido! Usa §a/register <contraseña>§e para crear tu cuenta.";
             msgLoginRequest = "§eUsa §a/login <contraseña>§e para autenticarte.";
-            msgAuthReminder = "§cDebes autenticarte: /register <contraseña> o /login <contraseña>";
-            msgAuthCountdown = "§cDebes autenticarte §7(%d segundos restantes)";
-            msgAuthBossbar = "§cAutentícate para jugar · %d segundos";
+            msgAuthReminder = "§eBienvenido. §7Usa §a/login <contraseña>§7 o §a/register <contraseña>§7 para crear una cuenta.";
+            msgAuthCountdown = "§cAutenticación requerida §7· quedan %d s";
+            msgAuthBossbar = "§cAutentícate para continuar · %d segundos";
             errNotPlayer = "Solo los jugadores pueden usar este comando.";
 
             // --- Registration Messages ---
@@ -245,9 +245,9 @@ public class LangConfig {
     private void applyChineseDefaults() {
         msgWelcome = "§e欢迎！请输入 §a/register <密码>§e 注册账号。";
         msgLoginRequest = "§e请输入 §a/login <密码>§e 登录。";
-        msgAuthReminder = "§c你必须先验证身份：/register <密码> 或 /login <密码>";
-        msgAuthCountdown = "§c请完成身份验证 §7（剩余 %d 秒）";
-        msgAuthBossbar = "§c完成身份验证后才能游戏 · 剩余 %d 秒";
+        msgAuthReminder = "§e欢迎！§7已有账号请输入 §a/login <密码>§7，新玩家请输入 §a/register <密码>§7。";
+        msgAuthCountdown = "§c请先完成身份验证 §7· 剩余 %d 秒";
+        msgAuthBossbar = "§c完成验证后即可继续 · 剩余 %d 秒";
         errNotPlayer = "只有玩家可以使用此命令。";
 
         errAlreadyRegistered = "§c你已经注册过账号，请使用 §e/login <密码>§c。";

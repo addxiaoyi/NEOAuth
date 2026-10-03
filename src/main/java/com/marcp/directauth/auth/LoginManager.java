@@ -41,6 +41,7 @@ public class LoginManager {
     private final Map<UUID, Long> automaticPremiumLogins = new ConcurrentHashMap<>();
     private final Map<UUID, UserData> pendingTotp = new ConcurrentHashMap<>();
     private final Map<UUID, AuthenticationMethod> pendingTotpMethods = new ConcurrentHashMap<>();
+    private final Map<UUID, PromptState> promptStates = new ConcurrentHashMap<>();
 
     public long getConnectionTime(ServerPlayer player) {
         return connectionTimes.getOrDefault(player.getUUID(), System.currentTimeMillis());
@@ -107,6 +108,7 @@ public class LoginManager {
         automaticPremiumLogins.entrySet().removeIf(entry -> now > entry.getValue());
         pendingTotp.entrySet().removeIf(entry -> !entry.getValue().isTotpEnabled());
         pendingTotpMethods.keySet().removeIf(uuid -> !pendingTotp.containsKey(uuid));
+        promptStates.entrySet().removeIf(entry -> now - entry.getValue().sentAt() > TimeUnit.MINUTES.toMillis(10));
         ipAttempts.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
         if (DirectAuth.getConfig() != null
                 && DirectAuth.getConfig().sessionPersistence
@@ -174,6 +176,17 @@ public class LoginManager {
         automaticPremiumLogins.remove(premiumUuid);
     }
     
+    public boolean shouldSendPrompt(ServerPlayer player, String promptKey, long cooldownMillis) {
+        long now = System.currentTimeMillis();
+        PromptState previous = promptStates.get(player.getUUID());
+        if (previous != null && previous.key().equals(promptKey)
+                && now - previous.sentAt() < Math.max(0, cooldownMillis)) {
+            return false;
+        }
+        promptStates.put(player.getUUID(), new PromptState(promptKey, now));
+        return true;
+    }
+
     public void beginTotp(ServerPlayer player, UserData userData) {
         beginTotp(player, userData, AuthenticationMethod.PASSWORD);
     }
@@ -310,6 +323,7 @@ public class LoginManager {
 
     // Clase interna simple para guardar los datos
     private record GraceSession(long expirationTime) {}
+    private record PromptState(String key, long sentAt) {}
 
     public void recordJoin(ServerPlayer player) {
         connectionTimes.put(player.getUUID(), System.currentTimeMillis());

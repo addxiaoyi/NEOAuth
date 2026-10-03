@@ -31,6 +31,7 @@ public class PlayerRestrictionHandler {
     
     private static final Map<UUID, Vec3> anchorPositions = new ConcurrentHashMap<>();
     private static final Map<UUID, ServerBossEvent> authBossBars = new ConcurrentHashMap<>();
+    private static final Map<UUID, Integer> lastCountdownSeconds = new ConcurrentHashMap<>();
 
     public static void removeAnchor(ServerPlayer player) {
         anchorPositions.remove(player.getUUID());
@@ -54,7 +55,20 @@ public class PlayerRestrictionHandler {
 
     private static void removeAuthBossBar(ServerPlayer player) {
         ServerBossEvent bossBar = authBossBars.remove(player.getUUID());
+        lastCountdownSeconds.remove(player.getUUID());
         if (bossBar != null) bossBar.removePlayer(player);
+    }
+
+    private static void remindAuthentication(ServerPlayer player) {
+        if (DirectAuth.getLoginManager().shouldSendPrompt(player, "auth-reminder", 3_000)) {
+            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgAuthReminder));
+        }
+    }
+
+    private static void remindBlockedAction(ServerPlayer player, String key, String message) {
+        if (DirectAuth.getLoginManager().shouldSendPrompt(player, key, 3_000)) {
+            player.sendSystemMessage(Component.literal(message));
+        }
     }
 
     public static void hideEffectsFromClient(ServerPlayer player) {
@@ -116,11 +130,15 @@ public class PlayerRestrictionHandler {
                 if (player.tickCount % 20 == 0) {
                     int remaining = DirectAuth.getLoginManager().getRemainingLoginSeconds(player);
                     ensureAuthBossBar(player, remaining);
-                    player.displayClientMessage(
-                        Component.literal(String.format(
-                                DirectAuth.getConfig().getLang().msgAuthCountdown, remaining)),
-                        true
-                    );
+                    int previous = lastCountdownSeconds.getOrDefault(player.getUUID(), -1);
+                    if (previous != remaining && (remaining <= 10 || remaining % 5 == 0)) {
+                        lastCountdownSeconds.put(player.getUUID(), remaining);
+                        player.displayClientMessage(
+                                Component.literal(String.format(
+                                        DirectAuth.getConfig().getLang().msgAuthCountdown, remaining)),
+                                true
+                        );
+                    }
                 }
             } 
             else if (anchorPositions.containsKey(player.getUUID()) || authBossBars.containsKey(player.getUUID())) {
@@ -165,7 +183,7 @@ public class PlayerRestrictionHandler {
                 player.getInventory().add(event.getEntity().getItem());
                 player.inventoryMenu.sendAllDataToRemote();
                 player.containerMenu.broadcastChanges();
-                player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgNoDrop));
+                remindBlockedAction(player, "drop", DirectAuth.getConfig().getLang().msgNoDrop);
             }
         }
     }
@@ -191,7 +209,7 @@ public class PlayerRestrictionHandler {
             String msg = event.getRawText();
             if (!msg.startsWith("/register") && !msg.startsWith("/login") && !msg.startsWith("/online")) {
                 event.setCanceled(true);
-                event.getPlayer().sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgUseCommands));
+                remindAuthentication(event.getPlayer());
             }
         }
     }
@@ -207,7 +225,7 @@ public class PlayerRestrictionHandler {
                     !cmd.equalsIgnoreCase("login") && 
                     !cmd.equalsIgnoreCase("online")) {
                     event.setCanceled(true);
-                    player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().msgUseCommands));
+                    remindAuthentication(player);
                 }
             }
         }
