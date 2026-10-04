@@ -284,6 +284,35 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         if (this.directAuth$premiumUuid != null) {
+            String sourceUuid = UUIDUtil.createOfflineProfile(profile.getName()).getId().toString();
+            if (!this.directAuth$isStartingVerifiedProfile
+                    && !sourceUuid.equalsIgnoreCase(profile.getId().toString())) {
+                ci.cancel();
+                this.directAuth$isStartingVerifiedProfile = true;
+                CompletableFuture.supplyAsync(
+                                () -> MigrationManager.migratePlayerData(this.server, sourceUuid, profile.getId().toString()))
+                        .thenAcceptAsync(migrated -> {
+                            if (!migrated || !this.connection.isConnected()) {
+                                if (this.connection.isConnected()) {
+                                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                                }
+                                this.directAuth$isStartingVerifiedProfile = false;
+                                return;
+                            }
+                            this.directAuth$startClientVerification(profile);
+                            this.directAuth$isStartingVerifiedProfile = false;
+                        }, this.server).exceptionally(error -> {
+                            this.server.execute(() -> {
+                                if (this.connection.isConnected()) {
+                                    DirectAuth.LOGGER.error("Premium data migration failed for {}", profile.getName(), error);
+                                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
+                                }
+                                this.directAuth$isStartingVerifiedProfile = false;
+                            });
+                            return null;
+                        });
+                return;
+            }
             this.directAuth$cacheTextures(profile);
             if (this.directAuth$loginData != null && this.requestedUsername != null) {
                 DirectAuth.getDatabase().updateUserAsync(this.requestedUsername, this.directAuth$loginData);
