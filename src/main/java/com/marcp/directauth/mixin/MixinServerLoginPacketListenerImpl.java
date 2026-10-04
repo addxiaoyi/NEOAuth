@@ -3,7 +3,6 @@ package com.marcp.directauth.mixin;
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.auth.MojangAPI;
-import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
@@ -284,35 +283,6 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         if (this.directAuth$premiumUuid != null) {
-            String sourceUuid = UUIDUtil.createOfflineProfile(profile.getName()).getId().toString();
-            if (!this.directAuth$isStartingVerifiedProfile
-                    && !sourceUuid.equalsIgnoreCase(profile.getId().toString())) {
-                ci.cancel();
-                this.directAuth$isStartingVerifiedProfile = true;
-                CompletableFuture.supplyAsync(
-                                () -> MigrationManager.migratePlayerData(this.server, sourceUuid, profile.getId().toString()))
-                        .thenAcceptAsync(migrated -> {
-                            if (!migrated || !this.connection.isConnected()) {
-                                if (this.connection.isConnected()) {
-                                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
-                                }
-                                this.directAuth$isStartingVerifiedProfile = false;
-                                return;
-                            }
-                            this.directAuth$startClientVerification(profile);
-                            this.directAuth$isStartingVerifiedProfile = false;
-                        }, this.server).exceptionally(error -> {
-                            this.server.execute(() -> {
-                                if (this.connection.isConnected()) {
-                                    DirectAuth.LOGGER.error("Premium data migration failed for {}", profile.getName(), error);
-                                    this.disconnect(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
-                                }
-                                this.directAuth$isStartingVerifiedProfile = false;
-                            });
-                            return null;
-                        });
-                return;
-            }
             this.directAuth$cacheTextures(profile);
             if (this.directAuth$loginData != null && this.requestedUsername != null) {
                 DirectAuth.getDatabase().updateUserAsync(this.requestedUsername, this.directAuth$loginData);
@@ -383,15 +353,8 @@ public abstract class MixinServerLoginPacketListenerImpl {
         String username = this.requestedUsername;
         if (username == null) return;
 
-        String sourceUuid = UUIDUtil.createOfflineProfile(username).getId().toString();
         String targetUuid = profile.getId().toString();
-        boolean needsMigration = !sourceUuid.equalsIgnoreCase(targetUuid);
-        CompletableFuture<Boolean> migration = needsMigration
-                ? CompletableFuture.supplyAsync(() -> MigrationManager.migratePlayerData(this.server, sourceUuid, targetUuid))
-                : CompletableFuture.completedFuture(true);
-
-        migration.thenCompose(migrated -> {
-            if (!migrated) return CompletableFuture.<UserData>completedFuture(null);
+        CompletableFuture.completedFuture(true).thenCompose(ignored -> {
             String ip = this.directAuth$remoteAddress();
             String passwordHash = LoginManager.generateUnconfiguredPasswordHash();
             String[] profileTextures = directAuth$texturePair(profile);

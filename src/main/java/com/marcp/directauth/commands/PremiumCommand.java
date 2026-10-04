@@ -3,7 +3,6 @@ package com.marcp.directauth.commands;
 import com.marcp.directauth.DirectAuth;
 import com.marcp.directauth.auth.LoginManager;
 import com.marcp.directauth.auth.MojangAPI;
-import com.marcp.directauth.data.MigrationManager;
 import com.marcp.directauth.data.UserData;
 import com.marcp.directauth.mixin.PlayerListAccessor;
 import com.mojang.brigadier.CommandDispatcher;
@@ -92,17 +91,9 @@ public class PremiumCommand {
             }
 
             ((PlayerListAccessor) player.getServer().getPlayerList()).callSave(player);
-            String sourceUuid = player.getStringUUID();
-            CompletableFuture.supplyAsync(() -> MigrationManager.migratePlayerData(
-                            player.getServer(), sourceUuid, formattedUUID))
-                    .thenAcceptAsync(migrated -> {
+            CompletableFuture.completedFuture(true)
+                    .thenAcceptAsync(ignored -> {
                         if (!player.connection.isAcceptingMessages()) return;
-                        if (!migrated) {
-                            DirectAuth.LOGGER.error("DirectAuth: Error migrating data for {}", username);
-                            player.sendSystemMessage(Component.literal(DirectAuth.getConfig().getLang().errStorageUnavailable));
-                            return;
-                        }
-
                         userData.setPremium(true);
                         userData.setOnlineUUID(formattedUUID);
                         DirectAuth.getDatabase().updateUserAsync(username, userData);
