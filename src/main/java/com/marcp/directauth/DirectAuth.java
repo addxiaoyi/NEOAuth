@@ -34,6 +34,9 @@ public class DirectAuth {
     private static ModConfig config;
     
     public DirectAuth(IEventBus modEventBus) {
+        // Mojang endpoints on some dual-stack hosts reset Java's IPv6 TLS path;
+        // prefer IPv4 so skin and profile requests match the working curl path.
+        System.setProperty("java.net.preferIPv4Stack", "true");
         loginManager = new LoginManager();
         
         // Registrar manejadores de eventos en el bus de juego (NeoForge.EVENT_BUS)
