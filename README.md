@@ -2,131 +2,232 @@
 
 # NEOauth
 
-NEOauth is a **server-side** authentication mod for Minecraft NeoForge 1.21.1. It provides a secure login system for offline-mode servers, with optional auto-login for players who own a legitimate Minecraft account.
+**NEOauth** 是适用于 **NeoForge 1.21.1** 的纯服务端登录与认证模组。客户端无需安装 NEOauth，正版客户端、离线客户端和皮肤站客户端都可以连接服务器。
 
-It is strictly server-side: clients do **not** need to install this mod to join. Players can connect with any vanilla client.
+> 当前版本：**1.3.37**
+> Minecraft：**1.21.1**  · NeoForge：**21.1.x**  · 服务端：`online-mode=false`
 
-All database operations run asynchronously, so the main server thread never freezes during logins.
+## 功能概览
 
-## Key Features
+- 纯服务端运行，客户端不需要安装模组
+- 离线密码注册与登录：`/register <密码>`、`/login <密码>`
+- 正版自动识别与自动登录，无需执行 `/online`
+- 正版玩家首次进入自动创建账号
+- Mojang 验证超时、失败或服务不可用时，已知正版身份可使用备用密码登录
+- 正版 UUID 与签名 `textures` 属性缓存，支持离线显示正版皮肤
+- 正版名称被离线客户端使用时，按离线身份进入密码登录，不再强制正版握手
+- SQLite 异步存储，不需要 MySQL
+- Argon2id 密码哈希，兼容旧 PBKDF2 数据并在成功登录后升级
+- 默认中文提示，内置中文、英文、西班牙文
+- 默认登录时间 300 秒（5 分钟），带 BossBar 倒计时和周期性登录指引
+- 断线后 10 分钟内可恢复会话，默认不绑定 IP
+- 可选 TOTP 双因素认证，默认关闭
+- 可配置注册冷却、IP 注册数量限制、密码长度和登录尝试次数
+- 支持正版 UUID 数据迁移和可配置模组数据迁移
 
-* **Server-Side Only**: Install it on your server and players join with any vanilla client. Nothing to install client-side.
-* **Zero-Configuration Database**: Uses an embedded SQLite database. No MySQL or external database server required.
-* **No Lag**: All database I/O is performed asynchronously on a separate thread pool.
-* **Strong Security**: Passwords use Argon2id with unique salts. Existing PBKDF2 accounts remain compatible and are upgraded to Argon2id after a successful login.
-* **Online Auto-Login**: Registered accounts are checked against Mojang during login and, when verified, skip `/online` and `/login` on future sessions.
-* **Automatic Premium Login**: Registered accounts are checked against Mojang during login. A successful premium session logs the player in without `/login` or `/online` and migrates existing offline-UUID data once.
-* **Known Premium Fallback**: If Mojang verification fails or times out for a previously verified account, NEOauth automatically accepts the stored premium UUID and cached signed skin properties without asking for `/login`. Unknown/offline accounts still require a password when premium verification fails.
-* **Session Grace Period**: If a player disconnects and reconnects within the configured grace period, they stay authenticated without logging in again. The default is 10 minutes, and the grace session is not restricted to the previous IP address. NEOauth stores a short-lived session marker, never a plaintext password.
-* **Anti-Bot Protection**: Configurable registration delay and a maximum number of accounts per IP address.
-* **Strict Restrictions**: Unauthenticated players cannot move, chat, interact with blocks/entities, drop or pick up items, attack, gain XP, or regenerate health.
-* **Smart Data Migration**: When a player switches from offline to online mode their UUID changes, so the mod automatically migrates their data to the new UUID (see below).
-* **Localization**: Ships with English (`en`), Simplified Chinese (`zh`) and Spanish (`es`); fully customizable message strings.
-* **Optional TOTP 2FA**: Disabled by default; set `totpEnabled = true` in the unified TOML before using `/totp setup`. Setup displays one-time recovery codes; each code is invalidated individually when used.
+## 玩家登录指引
 
-## Commands
+玩家进入后会看到清晰的中文提示：
 
-### Player commands
+```text
+已有账号：/login <密码>
+新玩家：/register <密码>
+```
 
-| Command | Usage | Description |
-| :--- | :--- | :--- |
-| **/register** | `/register <password>` | Creates a local password account. Not required for a first login verified as a legitimate Mojang account when `premiumAutoRegister=true`. |
-| **/login** | `/login <password>` | Authenticates your session. |
-| **/logout** | `/logout` | Logs you out (disconnects you from the server). |
-| **/changepassword** | `/changepassword <oldPassword> <newPassword>` | Changes your password. Requires being logged in. |
-| **/setpassword** | `/setpassword <password>` | Sets the fallback password for a first-time automatically created premium account. |
-| **/unregister** | `/unregister <password>` | Permanently deletes your own account (confirms with your password). |
-| **/online** | `/online <password>` | Legacy manual verification command. **Not required** when `premiumAutoLogin=true`; NEOauth verifies legitimate accounts automatically during LOGIN. |
-| **/directauth confirm** | `/directauth confirm` | Confirms a pending action when the mod requests it. |
+未认证期间，服务器会显示登录倒计时，并每隔一段时间重复发送一次指引，避免玩家因为没有看到首次提示而不知道下一步操作。
 
-### Admin commands (require OP level 4)
+### 常用命令
 
-| Command | Usage | Description |
-| :--- | :--- | :--- |
-| **/directauth online** | `/directauth online <user> <true\|false>` | Manually toggles a player's online-mode status. |
-| **/directauth resetpass** | `/directauth resetpass <user> <newPassword>` | Resets a player's password. |
-| **/directauth unregister** | `/directauth unregister <user>` | Force-deletes a player's account (and kicks them if online). |
-| **/directauth reload** | `/directauth reload` | Reloads the config and language files from disk at runtime — no server restart needed. |
-| **/directauth resetlang** | `/directauth resetlang` | Deletes the language files so they regenerate from the mod's built-in defaults (discards manual edits). |
+| 命令 | 用途 |
+| --- | --- |
+| `/register <密码>` | 注册离线账号 |
+| `/login <密码>` | 登录已有账号 |
+| `/logout` | 注销当前会话并断开连接 |
+| `/changepassword <旧密码> <新密码>` | 修改密码 |
+| `/setpassword <密码>` | 为自动创建的正版账号设置备用密码 |
+| `/unregister <密码>` | 删除自己的账号 |
+| `/totp setup` | 创建 TOTP（需要配置开启） |
+| `/totp verify <验证码>` | 验证 TOTP |
+| `/totp disable` | 关闭 TOTP |
 
-## ⚠️ Important: Online Mode Migration
+`/online` 仍保留兼容，但在 `premiumAutoLogin=true` 时正版玩家不需要执行它。
 
-When `premiumAutoLogin=true` (the default), NEOauth verifies a registered player's Mojang session during the LOGIN protocol. On success, the player's UUID changes from the offline UUID to the real Mojang UUID and NEOauth migrates their data automatically. The player does not need to run `/online`.
+## 正版与离线登录策略
 
-**By default** the mod already migrates vanilla data (inventory, ender chest, advancements, statistics) **and** a few common mods (graves/deaths, FTB Quests, SkinRestorer).
+NEOauth 会根据数据库记录、客户端 UUID 和正版验证结果选择登录方式：
 
-If your server uses **other** mods that store per-player data (e.g. Curios, Astral Sorcery, FTB Teams), the server administrator must add those folder names to the migration config before automatic premium detection runs. Otherwise that mod-specific progress may be lost.
+```text
+已知正版账号 + 匹配正版 UUID
+  → 正版 UUID + 签名皮肤 + 自动登录
 
-> **Always back up your world before migrating on a heavily modded server.**
+已知正版名称 + 不匹配正版 UUID（离线客户端）
+  → 离线 UUID + 密码登录
 
-## Installation
+普通离线账号
+  → 离线 UUID + 密码登录
 
-1. Download the `.jar` file.
-2. Place it in the `mods` folder of your NeoForge 1.21.1 server.
-3. Restart the server.
+Mojang 验证失败/超时
+  → 已知正版身份使用缓存身份或备用密码
+  → 未知玩家进入注册/密码流程
+```
 
-On first launch the following files are generated:
+离线玩家不会因为服务器尝试正版验证而被强制等待加密握手。正版名称的离线玩家也不会再因为客户端 UUID 不同而直接收到 `无效会话`。
 
-* Unified config: `config/Neoauth/Neoauth.toml` (contains all settings and English/Chinese/Spanish messages)
-* Database: `world/serverconfig/directauth.db`
+## 皮肤处理
 
-## Configuration
+正版验证成功后，NEOauth 会保留 Mojang 返回的签名 `textures` 属性，并在登录后刷新玩家列表资料。
 
-Edit `config/Neoauth/Neoauth.toml` to customize:
+皮肤缓存保存在 SQLite 中。Mojang 暂时不可用时，已缓存的正版皮肤仍可用于已知正版身份。
 
-* **Language**: `language` (`"en"`, `"zh"` or `"es"`). The default is `"zh"` (Simplified Chinese), stored in `config/Neoauth/Neoauth.toml`.
-* **Security**: `minPasswordLength`, `maxPasswordLength`, `maxLoginAttempts`, `loginCooldownMs`, `loginTimeout` (seconds before a non-authenticated player is kicked), and `premiumLoginFallbackOnFailure` (allow a known premium account to use its existing password if Mojang verification fails; defaults to `true`). The fallback retains that account's database `onlineUUID`.
+可选的离线同名皮肤功能由以下配置控制：
 
-  ```toml
-  [config]
-  premiumLoginFallbackOnFailure = true
-  ```
+```toml
+offlineSkinByName = true
+```
 
-  Set it to `false` to reject known premium accounts whenever Mojang session verification fails. With it enabled, a failed premium handshake does **not** switch to an offline UUID: the database UUID remains the player's UUID and `/login <password>` is still required before playing. `premiumAutoLogin` controls automatic Mojang checks and defaults to `true`. `premiumAutoRegister` defaults to `true` and creates a premium account automatically on the first verified login. The player can then run `/setpassword <password>` once to configure password fallback. `premiumVerificationTimeoutSeconds` defaults to `15`; after that time, a known premium account uses password fallback even if Mojang does not return a classified error.
-* **Sessions**: `sessionGracePeriod` (seconds a session survives after disconnect; default `600` = 10 minutes), `sessionCleanupInterval` (minutes between cleanups of expired sessions), `sessionPersistence` (default `true`) and `sessionBindToIp` (default `false`).
-* **Anti-Bot and offline skins**: `registrationDelay` (seconds to wait before a fresh player can register), `maxAccountsPerIP`, and `offlineSkinByName`. `maxAccountsPerIP` defaults to `0`, so registration is not limited by IP unless you set a positive value. `offlineSkinByName` defaults to `true`: after offline password authentication, NEOauth may apply the signed skin for the same Mojang name without changing the offline UUID or granting premium authentication. `skinNameEndpoint`/`skinNameFallbackEndpoints` and `skinProfileEndpoint`/`skinFallbackEndpoints` support ordered failover across trusted Yggdrasil providers. `skinAllowedHosts` is an HTTPS host allowlist; list only hosts you control or trust. Successful signed profiles are cached in SQLite. `totpEnabled = false` is the generated default and is intentionally opt-in; when it remains `false`, `/totp` setup/verification is disabled and no player is asked for a TOTP code. When enabled, players can use `/totp setup`, `/totp verify`, and `/totp disable`.
-* **Data Migration**: `migrationMap` — a map of *folder name → migration mode*. To support an extra mod, add its data folder there. Available modes:
-    * `RENAME` — rename a single file that is named after the UUID (most vanilla data, SkinRestorer).
-    * `DIRECTORY` — move/rename a whole folder named after the UUID (e.g. graves).
-    * `TEXT_REPLACE` — rename the file **and** replace UUID strings inside its contents (e.g. FTB Quests).
+启用后，离线密码登录的玩家可以按用户名尝试获取可信皮肤，但不会因此获得正版身份，也不会改变离线 UUID。
 
-  Example:
+## 安装
 
-  ```json
-  "migrationMap": {
-    "playerdata": "RENAME",
-    "stats": "RENAME",
-    "advancements": "RENAME",
-    "deaths": "DIRECTORY",
-    "ftbquests": "TEXT_REPLACE",
-    "skinrestorer": "RENAME"
-  }
-  ```
+1. 下载 `neoauth-1.3.37.jar`。
+2. 将文件放入 NeoForge 1.21.1 服务端的 `mods` 文件夹。
+3. 确保服务器使用：
 
-Message strings can be edited in the `NEOauth-lang-*.json` files.
+   ```properties
+   online-mode=false
+   ```
 
-## Troubleshooting (FAQ)
+4. 启动服务器。
+5. 首次启动后编辑：
 
-**Q: I keep getting teleported back when I move / I can't eat or regenerate health.**
-A: You aren't authenticated yet. Use `/register <password>` (first time) or `/login <password>`.
+   ```text
+   config/Neoauth/Neoauth.toml
+   ```
 
-**Q: I lost my items from [some mod] after automatic premium detection.**
-A: The server administrator likely hadn't added that mod's data folder to `migrationMap` before automatic migration. Contact your admin and restore the backup created by NEOauth if necessary.
+NEOauth 只生成一个统一 TOML 配置文件，不会再拆分生成多个配置文件。
 
-## Technical Details
+## 默认配置重点
 
-* **Hashing**: Argon2id with unique salts; legacy PBKDF2 hashes are accepted once and transparently upgraded after login.
-* **Storage**: SQLite at `world/serverconfig/directauth.db` — no external database server. A legacy `NEOauth_users.json` is migrated automatically on first run if present.
-* **Session Management**: Sessions are validated against the internal database (and Mojang's session servers for online users).
-* **Protection**: The login listener is injected at high priority to prevent unauthorized packet processing.
+```toml
+[config]
+language = "zh"
+loginTimeout = 300
+sessionGracePeriod = 600
+sessionBindToIp = false
+premiumAutoLogin = true
+premiumAutoRegister = true
+premiumLoginFallbackOnFailure = true
+offlineSkinByName = true
+totpEnabled = false
+maxAccountsPerIP = 0
+```
 
-## Compatibility
+### 重要配置说明
 
-* **Loader**: NeoForge 1.21.1
-* **Side**: Server-side only — works with any vanilla client and can be included in any modpack.
-* **Supported**: Dedicated servers and local LAN worlds.
-* **Not supported**: BungeeCord/Velocity networks that need player data synchronized across multiple server instances (e.g. Lobby → Survival transfers), since data is stored in the local world directory.
+- `loginTimeout`：未认证玩家被踢出的时间，默认 300 秒。
+- `sessionGracePeriod`：断线后可恢复会话的时间，默认 600 秒。
+- `sessionBindToIp`：默认 `false`，不会因为 IP 变化导致会话失效。
+- `premiumAutoLogin`：启用正版自动识别和自动登录。
+- `premiumAutoRegister`：正版玩家首次验证成功时自动创建账号。
+- `premiumLoginFallbackOnFailure`：Mojang 验证失败时允许已知正版身份回退。
+- `offlineSkinByName`：离线密码账号是否尝试加载同名皮肤。
+- `totpEnabled`：TOTP 默认关闭，需要时手动改为 `true`。
+- `maxAccountsPerIP`：默认 `0`，表示不限制同一 IP 的注册数量；设置为正整数后启用限制。
+
+修改配置后执行：
+
+```text
+/directauth reload
+```
+
+部分涉及登录协议或模组加载的改动需要重启服务器。
+
+## 数据位置与迁移
+
+- 配置：`config/Neoauth/Neoauth.toml`
+- 数据库：`world/serverconfig/directauth.db`
+- 旧版 JSON 配置和语言文件会在迁移成功后处理
+- 默认支持常见的 `playerdata`、`stats`、`advancements`、`deaths`、`ftbquests` 和 `skinrestorer`
+
+修改迁移规则前请备份世界。对大型整合包，建议先在副本服务器验证 UUID 和模组数据迁移结果。
+
+## 故障排查
+
+### 玩家不知道如何登录
+
+确认玩家能看到聊天提示或顶部 BossBar。使用：
+
+```text
+/login <密码>
+```
+
+已有账号，或：
+
+```text
+/register <密码>
+```
+
+新玩家。
+
+### 看到“无效会话”
+
+确认：
+
+1. 服务端是 `online-mode=false`；
+2. 玩家使用的是最新 NEOauth JAR；
+3. 没有其他认证模组在前置代理或后端提前拦截登录；
+4. 后端日志中是否出现 `NEOauth` 登录记录；
+5. 玩家是正版客户端还是离线客户端，以及是否使用了正版玩家名称。
+
+NEOauth 的目标行为是：正版客户端走正版自动登录，离线客户端即使使用正版名称也走离线 UUID 与密码登录。
+
+### 皮肤没有显示
+
+正版皮肤需要客户端缓存刷新和签名 `textures` 属性。请确认后端日志是否出现：
+
+```text
+Premium profile ... contains signed textures
+Refreshed signed skin profile ...
+```
+
+若服务器到 Mojang 或皮肤站网络不可用，NEOauth 会使用 SQLite 中已有的签名皮肤缓存；首次获取皮肤仍需要可信皮肤源可访问。
+
+## 构建
+
+要求：Java 21、网络可访问 Gradle/Minecraft 依赖仓库。
+
+Windows：
+
+```powershell
+./gradlew.bat clean build
+```
+
+Linux/macOS：
+
+```bash
+./gradlew clean build
+```
+
+构建产物：
+
+```text
+build/libs/neoauth-1.3.37.jar
+```
+
+## 兼容性
+
+- Minecraft：1.21.1
+- NeoForge：21.1.x
+- 服务端：Dedicated Server
+- 客户端：原版客户端即可，不需要安装 NEOauth
+- 不建议与多个同时拦截 LOGIN 阶段的认证模组叠加使用
+
+## English summary
+
+NEOauth is a server-side authentication mod for NeoForge 1.21.1. It supports offline password login, automatic premium detection, signed skin caching, Mojang outage fallback, premium-name cracked login fallback, asynchronous SQLite storage, Chinese/English/Spanish messages, configurable migration, and optional TOTP.
+
+Players do not need to install the mod. The default login timeout is 300 seconds, and unauthenticated players periodically receive clear `/login <password>` or `/register <password>` instructions.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License.
