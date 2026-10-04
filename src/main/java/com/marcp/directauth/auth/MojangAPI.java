@@ -62,7 +62,10 @@ public final class MojangAPI {
                 .build();
         return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).thenCompose(response -> {
             try (InputStream body = response.body()) {
-                if (response.statusCode() != 200) return lookupName(endpoints, index + 1, username);
+                if (response.statusCode() != 200) {
+                    LOGGER.warn("NEOauth: skin name endpoint returned HTTP {}: {}", response.statusCode(), uri.getHost());
+                    return lookupName(endpoints, index + 1, username);
+                }
                 String payload = readLimited(body);
                 JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
                 String uuid = json.has("id") ? formatUUID(json.get("id").getAsString()) : null;
@@ -85,7 +88,10 @@ public final class MojangAPI {
                 .GET().build();
         try {
             HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200) return fetchSignedProfile(endpoints, index + 1, uuid, fallbackName);
+            if (response.statusCode() != 200) {
+                LOGGER.warn("NEOauth: skin profile endpoint returned HTTP {}: {}", response.statusCode(), uri.getHost());
+                return fetchSignedProfile(endpoints, index + 1, uuid, fallbackName);
+            }
             String payload;
             try (InputStream body = response.body()) {
                 payload = readLimited(body);

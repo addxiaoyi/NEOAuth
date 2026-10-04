@@ -284,6 +284,12 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
         if (this.directAuth$premiumUuid != null) {
             this.directAuth$cacheTextures(profile);
+            if (!directAuth$hasSignedTextures(profile)) {
+                DirectAuth.LOGGER.warn("Premium profile for {} has no signed textures; UUID will be retained without skin",
+                        profile.getName());
+            } else {
+                DirectAuth.LOGGER.info("Premium profile for {} contains signed textures", profile.getName());
+            }
             if (this.directAuth$loginData != null && this.requestedUsername != null) {
                 DirectAuth.getDatabase().updateUserAsync(this.requestedUsername, this.directAuth$loginData);
             }

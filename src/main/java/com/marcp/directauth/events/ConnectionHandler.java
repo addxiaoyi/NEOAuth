@@ -87,6 +87,11 @@ public class ConnectionHandler {
         if (!player.connection.isAcceptingMessages()
                 || !DirectAuth.getLoginManager().isAuthenticated(player)
                 || player.getGameProfile().getProperties().get("textures").isEmpty()) {
+            if (DirectAuth.getLoginManager().isAuthenticated(player)
+                    && player.getGameProfile().getProperties().get("textures").isEmpty()) {
+                DirectAuth.LOGGER.warn("No textures property available for {}; skipping profile refresh",
+                        player.getGameProfile().getName());
+            }
             return;
         }
 
