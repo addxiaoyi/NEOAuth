@@ -18,6 +18,8 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class MojangAPI {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -37,46 +39,53 @@ public final class MojangAPI {
     public static CompletableFuture<String> getOnlineUUID(String username) {
         if (!isValidUsername(username)) return CompletableFuture.completedFuture(null);
 
-        URI uri = configuredUri(DirectAuth.getConfig().skinNameEndpoint, "name", username);
-        if (uri == null) return CompletableFuture.completedFuture(null);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(uri)
-                .timeout(REQUEST_TIMEOUT)
-                .header("Accept", "application/json")
-                .GET()
-                .build();
-
-        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-                .thenApply(response -> {
-                    try (InputStream body = response.body()) {
-                        if (response.statusCode() != 200) return null;
-                        String payload = readLimited(body);
-                        JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
-                        return json.has("id") ? formatUUID(json.get("id").getAsString()) : null;
-                    } catch (Exception exception) {
-                        LOGGER.warn("NEOauth: Mojang profile response could not be parsed for {}", username, exception);
-                        return null;
-                    }
-                })
-                .exceptionally(exception -> {
-                    LOGGER.warn("NEOauth: Mojang profile lookup failed for {}", username, exception);
-                    return null;
-                });
+        List<String> endpoints = endpointList(DirectAuth.getConfig().skinNameEndpoint,
+                DirectAuth.getConfig().skinNameFallbackEndpoints);
+        return lookupName(endpoints, 0, username);
     }
 
     /** Fetches a signed profile directly, bypassing third-party Authlib host rewrites. */
     public static GameProfile fetchSignedProfile(UUID uuid, String fallbackName) {
-        URI uri = configuredUri(DirectAuth.getConfig().skinProfileEndpoint,
-                "uuid", uuid.toString().replace("-", ""));
-        if (uri == null) return null;
+        List<String> endpoints = endpointList(DirectAuth.getConfig().skinProfileEndpoint,
+                DirectAuth.getConfig().skinFallbackEndpoints);
+        return fetchSignedProfile(endpoints, 0, uuid, fallbackName);
+    }
+
+    private static CompletableFuture<String> lookupName(List<String> endpoints, int index, String username) {
+        if (index >= endpoints.size()) return CompletableFuture.completedFuture(null);
+        URI uri = configuredUri(endpoints.get(index), "name", username);
+        if (uri == null) return lookupName(endpoints, index + 1, username);
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .GET()
                 .build();
+        return CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).thenCompose(response -> {
+            try (InputStream body = response.body()) {
+                if (response.statusCode() != 200) return lookupName(endpoints, index + 1, username);
+                String payload = readLimited(body);
+                JsonObject json = JsonParser.parseString(payload).getAsJsonObject();
+                String uuid = json.has("id") ? formatUUID(json.get("id").getAsString()) : null;
+                return uuid != null ? CompletableFuture.completedFuture(uuid)
+                        : lookupName(endpoints, index + 1, username);
+            } catch (Exception exception) {
+                LOGGER.warn("NEOauth: skin name endpoint failed: {}", uri.getHost());
+                return lookupName(endpoints, index + 1, username);
+            }
+        }).exceptionallyCompose(error -> lookupName(endpoints, index + 1, username));
+    }
+
+    private static GameProfile fetchSignedProfile(List<String> endpoints, int index, UUID uuid, String fallbackName) {
+        if (index >= endpoints.size()) return null;
+        URI uri = configuredUri(endpoints.get(index), "uuid", uuid.toString().replace("-", ""));
+        if (uri == null) return fetchSignedProfile(endpoints, index + 1, uuid, fallbackName);
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .GET().build();
         try {
             HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200) return null;
+            if (response.statusCode() != 200) return fetchSignedProfile(endpoints, index + 1, uuid, fallbackName);
             String payload;
             try (InputStream body = response.body()) {
                 payload = readLimited(body);
@@ -96,9 +105,20 @@ public final class MojangAPI {
             }
             return profile;
         } catch (Exception exception) {
-            LOGGER.warn("NEOauth: direct signed profile lookup failed for {}", uuid, exception);
-            return null;
+            LOGGER.warn("NEOauth: skin profile endpoint failed: {}", uri.getHost());
+            return fetchSignedProfile(endpoints, index + 1, uuid, fallbackName);
         }
+    }
+
+    private static List<String> endpointList(String primary, String fallbacks) {
+        List<String> endpoints = new ArrayList<>();
+        if (primary != null && !primary.isBlank()) endpoints.add(primary.trim());
+        if (fallbacks != null && !fallbacks.isBlank()) {
+            for (String value : fallbacks.split(",")) {
+                if (!value.isBlank() && !endpoints.contains(value.trim())) endpoints.add(value.trim());
+            }
+        }
+        return endpoints;
     }
 
     private static URI configuredUri(String template, String placeholder, String value) {
