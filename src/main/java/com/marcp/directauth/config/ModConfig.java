@@ -22,7 +22,7 @@ public class ModConfig {
     public int maxPasswordLength = 32;
     public int maxLoginAttempts = 5;
     public long loginCooldownMs = 3000;
-    public int loginTimeout = 60;
+    public int loginTimeout = 300;
     public boolean premiumLoginFallbackOnFailure = true;
     public boolean premiumAutoLogin = true;
     public boolean premiumAutoRegister = true;

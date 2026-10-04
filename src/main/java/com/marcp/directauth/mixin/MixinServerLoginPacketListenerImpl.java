@@ -42,6 +42,12 @@ public abstract class MixinServerLoginPacketListenerImpl {
     private boolean directAuth$isDataPreloaded;
 
     @Unique
+    private boolean directAuth$premiumNameProbeResolved;
+
+    @Unique
+    private boolean directAuth$premiumNameVerified;
+
+    @Unique
     private volatile UUID directAuth$premiumUuid;
 
     @Unique
@@ -97,18 +103,67 @@ public abstract class MixinServerLoginPacketListenerImpl {
         }
 
         this.directAuth$loginData = data;
+
+        // Offline clients advertise the deterministic offline UUID. Return before
+        // any network probe so Mojang latency can never block their login.
+        if (data == null && packet.profileId() != null
+                && UUIDUtil.createOfflinePlayerUUID(username).equals(packet.profileId())) {
+            return;
+        }
+
+        if (data == null && !this.directAuth$premiumNameProbeResolved) {
+            ci.cancel();
+            MojangAPI.getOnlineUUID(username).handleAsync((onlineUuid, error) -> {
+                this.directAuth$premiumNameProbeResolved = true;
+                this.directAuth$premiumNameVerified = error == null
+                        && onlineUuid != null
+                        && packet.profileId() != null
+                        && onlineUuid.equalsIgnoreCase(packet.profileId().toString());
+                this.handleHello(packet);
+                return null;
+            }, this.server);
+            return;
+        }
+
+        // An existing offline account must use the normal offline login path.
+        // Sending a premium encryption challenge here makes offline launchers wait
+        // for a key packet they cannot produce, ending in a login timeout.
+        if (data != null && !data.isPremium()) return;
         if (data == null && (DirectAuth.getConfig() == null || !DirectAuth.getConfig().premiumAutoLogin)) return;
+
+        // Offline launchers send the deterministic offline UUID in the hello packet.
+        // Do not challenge them with the premium encryption handshake: they cannot
+        // answer it and would otherwise sit until the login timeout expires.
+        if (data == null && !this.directAuth$premiumNameVerified) return;
 
         UUID premiumUuid = null;
         if (data != null && data.isPremium() && data.getOnlineUUID() != null) {
             try {
                 premiumUuid = UUID.fromString(data.getOnlineUUID());
                 this.directAuth$cachedPremiumProfile = directAuth$profileWithCachedTextures(premiumUuid, username, data);
+
+                // A cracked launcher may use the name of a premium account. Do
+                // not rely on the launcher UUID format: some launchers send a
+                // random UUID instead of the deterministic offline UUID. The only
+                // safe premium signal here is an exact match with the stored UUID.
+                if (!premiumUuid.equals(packet.profileId())) {
+                    UUID offlineUuid = UUIDUtil.createOfflinePlayerUUID(username);
+                    if (DirectAuth.getLoginManager() != null) {
+                        DirectAuth.getLoginManager().markPremiumPasswordFallback(offlineUuid);
+                    }
+                    DirectAuth.LOGGER.info(
+                            "Premium name {} connected without its premium UUID (client {}, premium {}); using password login with offline UUID {}",
+                            username, packet.profileId(), premiumUuid, offlineUuid);
+                    return;
+                }
             } catch (IllegalArgumentException exception) {
                 DirectAuth.LOGGER.error("Invalid stored premium UUID for {}", username, exception);
                 return;
             }
-        } else if (DirectAuth.getConfig() != null && DirectAuth.getConfig().premiumAutoLogin) {
+        } else if (data == null && this.directAuth$premiumNameVerified
+                && DirectAuth.getConfig() != null && DirectAuth.getConfig().premiumAutoLogin) {
+            // Unknown names may be probed, but never turn a known offline account
+            // into an encryption handshake.
             this.directAuth$automaticPremiumProbe = true;
         } else {
             return;
@@ -417,14 +472,27 @@ public abstract class MixinServerLoginPacketListenerImpl {
 
     @Unique
     private static boolean directAuth$isMojangVerificationFailure(Component reason) {
-        if (!(reason.getContents() instanceof TranslatableContents translated)) return false;
+        if (reason == null) return false;
+        if (reason.getContents() instanceof TranslatableContents translated) {
+            switch (translated.getKey()) {
+                case "multiplayer.disconnect.invalid_session",
+                        "multiplayer.disconnect.unverified_username",
+                        "multiplayer.disconnect.authservers_down",
+                        "multiplayer.disconnect.slow_login" -> {
+                    return true;
+                }
+                default -> { }
+            }
+        }
 
-        return switch (translated.getKey()) {
-            case "multiplayer.disconnect.unverified_username",
-                    "multiplayer.disconnect.authservers_down",
-                    "multiplayer.disconnect.slow_login" -> true;
-            default -> false;
-        };
+        // Some proxies/launchers flatten the reason before it reaches the mixin.
+        // Keep the fallback working for both the English key text and localized text.
+        String text = reason.getString().toLowerCase(java.util.Locale.ROOT);
+        return text.contains("invalid session")
+                || text.contains("unverified username")
+                || text.contains("无效会话")
+                || text.contains("验证用户名")
+                || text.contains("认证服务器");
     }
 
     @Invoker("startClientVerification")

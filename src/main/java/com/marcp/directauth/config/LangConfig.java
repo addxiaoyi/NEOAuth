@@ -11,11 +11,11 @@ import java.util.Map;
 
 public class LangConfig {
     // --- General Messages ---
-    public String msgWelcome = "§eWelcome! Use §a/register <password>§e to create your account.";
-    public String msgLoginRequest = "§eUse §a/login <password>§e to authenticate.";
-    public String msgAuthReminder = "§eWelcome! §7Use §a/login <password>§7, or §a/register <password>§7 to create an account.";
-    public String msgAuthCountdown = "§cAuthentication required §7· %d seconds";
-    public String msgAuthBossbar = "§cAuthenticate to continue · %d seconds";
+    public String msgWelcome = "§eWelcome! §7New players: §a/register <password> §7· Existing players: §a/login <password>§7.";
+    public String msgLoginRequest = "§eLogin required: §a/login <password> §7(you have 5 minutes).";
+    public String msgAuthReminder = "§6【登录指引】§f已有账号：§a/login <密码> §7| 新玩家：§a/register <密码> §7| 剩余时间见顶部进度条。";
+    public String msgAuthCountdown = "§c请先完成登录 §7· 剩余 %d 秒";
+    public String msgAuthBossbar = "§6请完成登录 · 剩余 %d 秒";
     public String errNotPlayer = "Only players can use this command.";
     
     // --- Registration Messages ---

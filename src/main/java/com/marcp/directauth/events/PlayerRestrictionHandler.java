@@ -140,6 +140,11 @@ public class PlayerRestrictionHandler {
                         );
                     }
                 }
+
+                // Some proxy/launcher combinations delay the login event message.
+                // Repeat the actionable guide at a low rate so the player never
+                // has to guess the commands while remaining unauthenticated.
+                if (player.tickCount % 100 == 0) remindAuthentication(player);
             } 
             else if (anchorPositions.containsKey(player.getUUID()) || authBossBars.containsKey(player.getUUID())) {
                 removeAuthBossBar(player);

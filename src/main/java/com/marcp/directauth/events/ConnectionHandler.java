@@ -187,6 +187,9 @@ public class ConnectionHandler {
                 DirectAuth.getLoginManager().invalidateSession(player);
                 DirectAuth.LOGGER.info("Known premium player {} is using password login with UUID {}",
                         player.getGameProfile().getName(), actualUUID);
+            } else if (premiumPasswordFallback) {
+                DirectAuth.LOGGER.info("Premium-name offline login for {} requires password; using offline UUID {}",
+                        player.getGameProfile().getName(), actualUUID);
             } else {
                 player.connection.disconnect(Component.literal(DirectAuth.getConfig().getLang().msgPremiumError));
                 return;
